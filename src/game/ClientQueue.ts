@@ -1,6 +1,12 @@
 import { Container, Point } from 'pixi.js'
 import { Client } from './Client'
+import { Order } from './Order'
 import type { RecipeId } from '../recipes'
+import { layout, DESIGN_W } from '../layout'
+import type { SpineName } from '../assets'
+
+// Three character spines, one per slot. Order = slot 0, 1, 2 (left → right).
+const CLIENT_SPINES: SpineName[] = ['italian_man', 'pretty_woman', 'old_grambler']
 
 export class ClientQueue extends Container {
   onClientReady: ((c: Client) => void) | null = null
@@ -9,16 +15,38 @@ export class ClientQueue extends Container {
 
   private clients: Client[] = []
   private slots: Point[] = []
-  private plan: RecipeId[][] = []
-  private nextOrderIndex = 0
-  private spawnTimer = 0
 
-  start(plan: RecipeId[][], slots: Point[]): void {
-    this.plan = plan
+  start(_plan: RecipeId[][], slots: Point[]): void {
     this.slots = slots
-    this.nextOrderIndex = 0
-    this.spawnTimer = 0
-    // TODO: spawn first client immediately
+
+    // Spawn three clients simultaneously off-screen left; each tween-walks
+    // to its slot. Idle spine animation runs throughout (no walk anim shipped).
+    const spawnX = -200
+    for (let i = 0; i < CLIENT_SPINES.length && i < slots.length; i++) {
+      const order = new Order(['shawarma']) // dummy — order/bubble logic comes later
+      const client = new Client(order, CLIENT_SPINES[i])
+      client.scale.set(layout.clientScale)
+      client.position.set(spawnX, slots[i].y)
+      this.addChild(client)
+      this.clients.push(client)
+      client.walkIn(slots[i], () => { /* no-op for now */ })
+    }
+  }
+
+  // Sends the first waiting client off-screen right. Returns true if a
+  // client was dismissed. Used by the dev cheat (key G).
+  dismissNext(): boolean {
+    const client = this.clients.find((c) => c.state === 'waiting')
+    if (!client) return false
+    const target = new Point(DESIGN_W + 200, client.position.y)
+    client.walkOut(target, () => {
+      this.removeChild(client)
+      const idx = this.clients.indexOf(client)
+      if (idx >= 0) this.clients.splice(idx, 1)
+      this.onClientLeft?.(client, false)
+      if (this.clients.length === 0) this.onAllDone?.()
+    })
+    return true
   }
 
   findMatching(recipe: RecipeId): Client | null {
@@ -42,12 +70,11 @@ export class ClientQueue extends Container {
   }
 
   update(dt: number): void {
-    // TODO: spawn timer; per-client update; check completion → walkOut → remove → onClientLeft;
-    //       when nextOrderIndex >= plan.length and clients empty → onAllDone
+    for (const c of this.clients) c.update(dt)
   }
 
   layout(slots: Point[]): void {
     this.slots = slots
-    // TODO: reposition active clients to their slots
+    // TODO: reposition active clients on resize/layout change
   }
 }

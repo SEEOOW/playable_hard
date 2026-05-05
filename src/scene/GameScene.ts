@@ -20,7 +20,6 @@ export class GameScene extends Container {
   private uiRoot: Container
 
   // World children
-  private background: Container
   private back: Sprite
   private table: Sprite
   private clientQueue: ClientQueue
@@ -43,15 +42,15 @@ export class GameScene extends Container {
     // World ----------------------------------------------------------------
     this.worldRoot = new Container()
 
-    this.background = new Container()
     this.back = new Sprite(tex('back'))
     this.table = new Sprite(tex('table'))
-    this.background.addChild(this.back, this.table)
 
     this.clientQueue = new ClientQueue()
     this.kitchen = new Kitchen()
 
-    this.worldRoot.addChild(this.background, this.clientQueue, this.kitchen)
+    // z-order: back wall → clients (behind the table) → table → kitchen.
+    // Clients sit between back and table so the table partially occludes them.
+    this.worldRoot.addChild(this.back, this.clientQueue, this.table, this.kitchen)
 
     // UI -------------------------------------------------------------------
     this.uiRoot = new Container()
@@ -97,6 +96,11 @@ export class GameScene extends Container {
 
   notifyInteraction(): void {
     this.hint.notifyInteraction()
+  }
+
+  // Dev cheat: dismiss the next waiting client (sends them off-screen).
+  dismissNextClient(): boolean {
+    return this.clientQueue.dismissNext()
   }
 
   // Static, design-space layout. Called once at construction.

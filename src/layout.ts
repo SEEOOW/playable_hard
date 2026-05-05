@@ -79,7 +79,9 @@ export type LayoutMap = {
   background: { back: LayerSpec; table: LayerSpec }
 
   // Clients walk in above the counter — PSD has no client layer; positions are placed.
+  // Client.position is the spine root (feet). y is PLACEHOLDER until calibrated.
   clientSlots: Point[]
+  clientScale: number
 
   pita: { basket: LayerSpec; tortilla: LayerSpec }
   fries: LayerSpec
@@ -112,11 +114,16 @@ export const layout: LayoutMap = {
     table: s(0, -164, 1280, 1177),  // table smartobject
   },
 
+  // Y is the TOP edge (head line) — Client offsets the spine internally so
+  // characters of different heights share the same head Y (feet vary).
+  // Middle client centered horizontally; outer two ±200px around the center.
   clientSlots: [
-    new Point(320, 240),
-    new Point(640, 240),
-    new Point(960, 240),
+    new Point(440, 170),  // 640 - 200
+    new Point(660, 170),  // canvas center (1280 / 2)
+    new Point(860, 170),  // 640 + 200
   ],
+  // PLACEHOLDER — characters are ~600–770px tall; halve them for now.
+  clientScale: 0.5,
 
   pita: {
     basket:   s(679, 551, 150, 104),
