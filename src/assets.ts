@@ -9,6 +9,12 @@ export type AssetName =
   | 'fries' | 'tomato' | 'cucumber' | 'drink'
   // dish (PSD: pita_clean group + meat stack on bowl)
   | 'plate' | 'pita1' | 'pita2' | 'meat1' | 'meat2'
+  // pita assembly — textures rendered out of src/pita/*.psd reference layers.
+  | 'pita_back' | 'pita_top' | 'pita_front'
+  | 'pita_meat_a' | 'pita_meat_b'
+  | 'pita_cucumber'
+  | 'pita_fries_a' | 'pita_fries_b'
+  | 'pita_tomato'
   // UI
   | 'coin' | 'sound_on' | 'bubble' | 'hand' | 'button_install'
 
@@ -32,6 +38,15 @@ const MANIFEST: Record<AssetName, string> = {
   pita2:          url('images/dish/pita2.png'),
   meat1:          url('images/meat/meat1.png'),
   meat2:          url('images/meat/meat2.png'),
+  pita_back:      url('images/pita/pita_back.png'),
+  pita_top:       url('images/pita/pita_top.png'),
+  pita_front:     url('images/pita/pita_front.png'),
+  pita_meat_a:    url('images/pita/pita_meat_a.png'),
+  pita_meat_b:    url('images/pita/pita_meat_b.png'),
+  pita_cucumber:  url('images/pita/pita_cucumber.png'),
+  pita_fries_a:   url('images/pita/pita_fries_a.png'),
+  pita_fries_b:   url('images/pita/pita_fries_b.png'),
+  pita_tomato:    url('images/pita/pita_tomato.png'),
   coin:           url('images/ui/coin.png'),
   sound_on:       url('images/ui/button_sound_on.png'),
   bubble:         url('images/ui/bubble.png'),

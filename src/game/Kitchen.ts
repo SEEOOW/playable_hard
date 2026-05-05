@@ -5,6 +5,8 @@ import { tex, type AssetName } from '../assets'
 import { applySpec, type LayoutMap, type LayerSpec } from '../layout'
 import { config } from '../config'
 import type { Ingredient, RecipeId } from '../recipes'
+import { PitaAssembly } from '../pita/PitaAssembly'
+import { PITA_ORIGIN_DX, PITA_ORIGIN_DY, type PitaIngredient } from '../pita/recipes'
 
 type CookState = 'idle' | 'slicing' | 'flying' | 'done'
 
@@ -22,10 +24,9 @@ export class Kitchen extends Container {
   private plateSprites: Sprite[]
   private drinks: Sprite[]
   private tomatoSlices: Sprite[]
-  // One pita pair (pita1 + pita2 layers) per plate slot. Hidden until the
-  // player taps the pita station; one tap = pita on the first free plate.
-  private pita1Sprites: Sprite[]
-  private pita2Sprites: Sprite[]
+  // One pita assembly per plate slot. Empty until the player taps the basket.
+  // After that, ingredient taps fill it up to PitaAssembly.MAX_INGREDIENTS.
+  private pitas: PitaAssembly[]
   private meatStack: Sprite[]
 
   // Cooking sequence state machine: tap → slice → fly → idle (× 3 → done)
@@ -57,14 +58,10 @@ export class Kitchen extends Container {
     this.plateSprites   = makeMany('plate', 3)
     this.drinks         = makeMany('drink', 3)
     this.tomatoSlices   = makeMany('tomato', 6)
-    this.pita1Sprites   = makeMany('pita1', 3)
-    this.pita2Sprites   = makeMany('pita2', 3)
+    this.pitas          = [new PitaAssembly(), new PitaAssembly(), new PitaAssembly()]
     this.meatStack      = [new Sprite(), new Sprite(), new Sprite()]
     // Bowl starts empty — meat is revealed slot-by-slot on tap.
     this.meatStack.forEach((s) => { s.visible = false })
-    // Plates start empty — pita appears only after the player taps the basket.
-    this.pita1Sprites.forEach((s) => { s.visible = false })
-    this.pita2Sprites.forEach((s) => { s.visible = false })
 
     // Pita station is the basket+tortilla pile. Click target is the basket
     // (larger sprite below); tortilla on top stays non-interactive so taps
@@ -73,6 +70,16 @@ export class Kitchen extends Container {
     this.basket.cursor = 'pointer'
     this.tortilla.eventMode = 'none'
     this.basket.on('pointerdown', () => this.placePita())
+
+    // Ingredient stations on the table — tap on any of them adds the
+    // corresponding ingredient inside the current open pita. Cap at 3.
+    // Meat slots (when visible) sit on top of the bowl and would otherwise
+    // swallow the tap, so wire them too.
+    setupTapAdd(this.bowl, () => this.addIngredient('meat'))
+    this.meatStack.forEach((s) => setupTapAdd(s, () => this.addIngredient('meat')))
+    setupTapAdd(this.fries, () => this.addIngredient('fries'))
+    this.cucumberSlices.forEach((s) => setupTapAdd(s, () => this.addIngredient('cucumber')))
+    this.tomatoSlices.forEach((s) => setupTapAdd(s, () => this.addIngredient('tomato')))
 
     this.addChild(
       this.basket,
@@ -85,20 +92,50 @@ export class Kitchen extends Container {
       ...this.plateSprites,
       ...this.drinks,
       ...this.tomatoSlices,
-      ...this.pita1Sprites,
-      ...this.pita2Sprites,
+      ...this.pitas,
       ...this.meatStack,
     )
   }
 
-  // Reveals one pita pair on the first plate that doesn't have one yet.
-  // No-op if every plate is already topped.
+  // Lays an empty open pita on the first plate that doesn't have one yet.
   private placePita(): void {
-    for (let i = 0; i < this.pita1Sprites.length; i++) {
-      if (this.pita1Sprites[i].visible) continue
-      this.pita1Sprites[i].visible = true
-      this.pita2Sprites[i].visible = true
-      return
+    for (const pita of this.pitas) {
+      if (!pita.hasPita()) {
+        pita.spawnEmpty()
+        return
+      }
+    }
+  }
+
+  // Adds an ingredient to the first plate whose pita exists, isn't full and
+  // doesn't already contain this ingredient. Continues if the candidate
+  // refused (e.g. duplicate) so a 2nd tap of meat lands on plate 2, etc.
+  // Meat additionally consumes one portion from the bowl (LIFO: the most
+  // recently sliced piece is taken first).
+  private addIngredient(ing: PitaIngredient): void {
+    if (ing === 'meat' && !this.hasAvailableMeat()) return
+    for (const pita of this.pitas) {
+      if (!pita.hasPita()) continue
+      if (pita.isFull()) continue
+      if (pita.addIngredient(ing)) {
+        if (ing === 'meat') this.consumeOneMeat()
+        return
+      }
+    }
+  }
+
+  private hasAvailableMeat(): boolean {
+    return this.meatStack.some((s) => s.visible)
+  }
+
+  // Hide the highest-index visible meat sprite (LIFO: the last revealed slice
+  // is the first one consumed).
+  private consumeOneMeat(): void {
+    for (let i = this.meatStack.length - 1; i >= 0; i--) {
+      if (this.meatStack[i].visible) {
+        this.meatStack[i].visible = false
+        return
+      }
     }
   }
 
@@ -133,14 +170,12 @@ export class Kitchen extends Container {
     applyMany(this.drinks,          map.juice)
     applyMany(this.tomatoSlices,    map.tomatoSlices)
 
-    // Pita layers — propagate the PSD pita-on-plate1 offsets to plates 2 and 3.
-    const p0 = map.plates[0]
-    const dx1 = map.pitaClean.pita1.x - p0.x, dy1 = map.pitaClean.pita1.y - p0.y
-    const dx2 = map.pitaClean.pita2.x - p0.x, dy2 = map.pitaClean.pita2.y - p0.y
-    for (let i = 0; i < this.pita1Sprites.length; i++) {
+    // Each pita assembly sits at its plate's PSD canvas origin (top-left of
+    // the 200×200 reference frame in src/pita/*.psd) and uses the canonical
+    // pita scale; layers within use raw PSD coords.
+    for (let i = 0; i < this.pitas.length; i++) {
       const plate = map.plates[i]
-      applySpec(this.pita1Sprites[i], { x: plate.x + dx1, y: plate.y + dy1, w: map.pitaClean.pita1.w, h: map.pitaClean.pita1.h })
-      applySpec(this.pita2Sprites[i], { x: plate.x + dx2, y: plate.y + dy2, w: map.pitaClean.pita2.w, h: map.pitaClean.pita2.h })
+      this.pitas[i].position.set(plate.x + PITA_ORIGIN_DX, plate.y + PITA_ORIGIN_DY)
     }
 
     // Meat slices use center anchor — easier to fly in and to flip-mirror
@@ -231,4 +266,11 @@ function applyMany(sprites: Sprite[], specs: LayerSpec[]): void {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
+}
+
+// Wires a single sprite as a tap source for an ingredient action.
+function setupTapAdd(sprite: Sprite, fire: () => void): void {
+  sprite.eventMode = 'static'
+  sprite.cursor = 'pointer'
+  sprite.on('pointerdown', fire)
 }
