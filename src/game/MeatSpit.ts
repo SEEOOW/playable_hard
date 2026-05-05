@@ -11,6 +11,8 @@ import { applySpec, type LayerSpec, type SpineSpitPos } from '../layout'
 export class MeatSpit extends Container {
   portions = config.spit.maxPortions
   onPortionTaken: (() => void) | null = null
+  // Fired when the player taps the spit area. Kitchen drives the slice motion.
+  onSliceTap: (() => void) | null = null
 
   private cookTimer = 0
   private grill: Sprite
@@ -28,6 +30,21 @@ export class MeatSpit extends Container {
     this.skewerFront = makeSpine('skewer_front')
 
     this.addChild(this.grill, this.skewerBack, this.spitBack, this.spitFront, this.skewerFront)
+
+    // Spine layers must NOT intercept pointer events — otherwise they catch
+    // pointerdown on their internal mesh and the grill below never sees the
+    // press, even though pointerover (cursor) still bubbles to grill.
+    this.skewerBack.eventMode  = 'none'
+    this.spitBack.eventMode    = 'none'
+    this.spitFront.eventMode   = 'none'
+    this.skewerFront.eventMode = 'none'
+
+    // Grill is the bottom layer of the spit — the click target.
+    this.grill.eventMode = 'static'
+    this.grill.cursor = 'pointer'
+    const fire = () => this.onSliceTap?.()
+    this.grill.on('pointerdown', fire)
+    this.grill.on('pointertap',  fire)
 
     // Idle loop on the meat (full-meat state). skewerBack has no animations —
     // stays in setup pose. skewerFront's '1st' selects which top stick is shown.

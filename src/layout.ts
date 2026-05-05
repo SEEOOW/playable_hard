@@ -66,7 +66,11 @@ export function applyUiAnchor(
   sprite.height = sh
 }
 
-export type MeatChunk = { texture: Extract<AssetName, 'meat1' | 'meat2'>; spec: LayerSpec }
+export type MeatChunk = {
+  texture: Extract<AssetName, 'meat1' | 'meat2'>
+  spec: LayerSpec
+  flipped?: boolean
+}
 
 // Spine spit visuals (kebab_back + kebab_front) are positioned by root + uniform scale.
 export type SpineSpitPos = { x: number; y: number; scale: number }
@@ -159,7 +163,7 @@ export const layout: LayoutMap = {
   meatStack: [
     { texture: 'meat1', spec: s(557, 562, 106, 62) },
     { texture: 'meat2', spec: s(559, 565, 114, 55) },
-    { texture: 'meat1', spec: s(565, 553, 107, 63) },
+    { texture: 'meat1', spec: s(565, 553, 107, 63), flipped: true },
   ],
 
   // PLACEHOLDER — replace with PSD/layout-derived coords.
