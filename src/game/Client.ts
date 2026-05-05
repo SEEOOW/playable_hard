@@ -9,6 +9,8 @@ export type ClientState = 'walkingIn' | 'waiting' | 'leaving'
 
 export class Client extends Container {
   readonly order: Order
+  readonly spineName: SpineName
+  slotIdx = 0
   state: ClientState = 'walkingIn'
   patienceLeft = config.client.patience
 
@@ -22,6 +24,7 @@ export class Client extends Container {
   constructor(order: Order, spineName: SpineName) {
     super()
     this.order = order
+    this.spineName = spineName
     this.spine = makeSpine(spineName)
     this.spine.eventMode = 'none'
 
@@ -65,9 +68,8 @@ export class Client extends Container {
     if (this.walkT != null) {
       this.walkT += dt
       const p = Math.min(this.walkT / this.walkDur, 1)
-      const eased = 1 - (1 - p) * (1 - p)
-      this.position.x = lerp(this.walkStart.x, this.walkTarget.x, eased)
-      this.position.y = lerp(this.walkStart.y, this.walkTarget.y, eased)
+      this.position.x = lerp(this.walkStart.x, this.walkTarget.x, p)
+      this.position.y = lerp(this.walkStart.y, this.walkTarget.y, p)
       if (p >= 1) {
         this.walkT = null
         // Only walk-in transitions to waiting; walk-out keeps state 'leaving'.

@@ -46,17 +46,18 @@ const MANIFEST: Record<AssetName, string> = {
 export type SpineName =
   | 'kebab_back' | 'kebab_front' | 'kebab_cut'
   | 'skewer_back' | 'skewer_front'
-  | 'italian_man' | 'pretty_woman' | 'old_grambler'
+  | 'italian_man' | 'pretty_woman' | 'old_grambler' | 'old_stylish_woman'
 
 const SPINE_MANIFEST: Record<SpineName, { json: string; atlas: string }> = {
-  kebab_back:   { json: url('spine_v42/kebab_back.json'),    atlas: url('spine_v42/kebab_back.atlas') },
-  kebab_front:  { json: url('spine_v42/kebab_front.json'),   atlas: url('spine_v42/kebab_front.atlas') },
-  kebab_cut:    { json: url('spine_v42/kebab_cut.json'),     atlas: url('spine_v42/kebab_cut.atlas') },
-  skewer_back:  { json: url('spine_v42/skewer_back.json'),   atlas: url('spine_v42/skewer_back.atlas') },
-  skewer_front: { json: url('spine_v42/skewer_front.json'),  atlas: url('spine_v42/skewer_front.atlas') },
-  italian_man:  { json: url('spine_v42/italian_man.json'),   atlas: url('spine_v42/italian_man.atlas') },
-  pretty_woman: { json: url('spine_v42/pretty_woman.json'),  atlas: url('spine_v42/pretty_woman.atlas') },
-  old_grambler: { json: url('spine_v42/old_grambler.json'),  atlas: url('spine_v42/old_grambler.atlas') },
+  kebab_back:        { json: url('spine_v42/kebab_back.json'),        atlas: url('spine_v42/kebab_back.atlas') },
+  kebab_front:       { json: url('spine_v42/kebab_front.json'),       atlas: url('spine_v42/kebab_front.atlas') },
+  kebab_cut:         { json: url('spine_v42/kebab_cut.json'),         atlas: url('spine_v42/kebab_cut.atlas') },
+  skewer_back:       { json: url('spine_v42/skewer_back.json'),       atlas: url('spine_v42/skewer_back.atlas') },
+  skewer_front:      { json: url('spine_v42/skewer_front.json'),      atlas: url('spine_v42/skewer_front.atlas') },
+  italian_man:       { json: url('spine_v42/italian_man.json'),       atlas: url('spine_v42/italian_man.atlas') },
+  pretty_woman:      { json: url('spine_v42/pretty_woman.json'),      atlas: url('spine_v42/pretty_woman.atlas') },
+  old_grambler:      { json: url('spine_v42/old_grambler.json'),      atlas: url('spine_v42/old_grambler.atlas') },
+  old_stylish_woman: { json: url('spine_v42/old_stylish_woman.json'), atlas: url('spine_v42/old_stylish_woman.atlas') },
 }
 
 export async function loadAssets(): Promise<void> {

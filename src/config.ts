@@ -6,9 +6,9 @@ export const config = {
     maxPortions: 4,
   },
   client: {
-    walkInDuration: 0.8,
+    walkInDuration: 2.4,
     patience: 12,
-    walkOutDuration: 0.6,
+    walkOutDuration: 1.8,
   },
   queue: {
     spawnInterval: 1.5,
