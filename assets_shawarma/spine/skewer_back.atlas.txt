@@ -1,0 +1,9 @@
+skewer_back.png
+size:256,128
+filter:Linear,Linear
+scale:0.7
+skewer_base
+bounds:2,2,97,141
+rotate:90
+skewer_top_shadow
+bounds:145,17,60,82
