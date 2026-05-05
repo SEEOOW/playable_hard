@@ -42,6 +42,9 @@ export class Kitchen extends Container {
   private activeRecipes: RecipeId[] = []
   private inProgress: Ingredient[] = []
 
+  // Per-drink cooldown timer; >0 means hidden, ticks down to 0 → reappear.
+  private drinkCooldown: number[] = [0, 0, 0]
+
   constructor() {
     super()
 
@@ -80,6 +83,9 @@ export class Kitchen extends Container {
     setupTapAdd(this.fries, () => this.addIngredient('fries'))
     this.cucumberSlices.forEach((s) => setupTapAdd(s, () => this.addIngredient('cucumber')))
     this.tomatoSlices.forEach((s) => setupTapAdd(s, () => this.addIngredient('tomato')))
+    // Drinks aren't placed inside the pita — they're a separate order item.
+    // Tap → hide → reappear after `config.drink.cooldown` seconds.
+    this.drinks.forEach((sprite, idx) => setupTapAdd(sprite, () => this.takeDrink(idx)))
 
     this.addChild(
       this.basket,
@@ -155,6 +161,25 @@ export class Kitchen extends Container {
   update(dt: number): void {
     this.spit.update(dt)
     this.runCooking(dt)
+    this.tickDrinks(dt)
+  }
+
+  // Restores tapped drinks after their cooldown elapses.
+  private tickDrinks(dt: number): void {
+    for (let i = 0; i < this.drinkCooldown.length; i++) {
+      if (this.drinkCooldown[i] <= 0) continue
+      this.drinkCooldown[i] -= dt
+      if (this.drinkCooldown[i] <= 0) {
+        this.drinkCooldown[i] = 0
+        this.drinks[i].visible = true
+      }
+    }
+  }
+
+  private takeDrink(idx: number): void {
+    if (!this.drinks[idx].visible) return
+    this.drinks[idx].visible = false
+    this.drinkCooldown[idx] = config.drink.cooldown
   }
 
   layout(map: LayoutMap): void {

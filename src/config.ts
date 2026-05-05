@@ -22,6 +22,9 @@ export const config = {
   hint: {
     idleDelay: 1.5,
   },
+  drink: {
+    cooldown: 3.0,  // seconds before a tapped drink reappears
+  },
   cooking: {
     sliceDuration: 1.8,   // knife top→bottom pass per tap, sec
     flyDuration:   0.4,   // slice flies from knife to bowl slot, sec

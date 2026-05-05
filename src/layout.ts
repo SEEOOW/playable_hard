@@ -140,7 +140,7 @@ export const layout: LayoutMap = {
   // PLACEHOLDER — tweak to align the bubble with the head.
   bubble: {
     offset: { x: 70, y: 5 },
-    scale:  { x: 0.7, y: 0.7 },
+    scale:  { x: 0.77, y: 0.77 },
   },
 
   // Per-character horizontal nudges (world pixels). Bubble stays at slot.

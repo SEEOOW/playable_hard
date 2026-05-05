@@ -3,10 +3,21 @@ import { Spine } from '@esotericsoftware/spine-pixi-v8'
 import { Order } from './Order'
 import type { RecipeId } from '../recipes'
 import { makeSpine, tex, type SpineName } from '../assets'
-import { layout } from '../layout'
+import { applySpec, layout } from '../layout'
 import { config } from '../config'
+import { closedPitaLayers, type Recipe } from '../pita/recipes'
+import type { OrderItem } from '../pita/orders'
 
 export type ClientState = 'walkingIn' | 'waiting' | 'leaving'
+
+// Bubble layout (in bubble-local coords, BEFORE bubble.scale is applied).
+// Bubble.png is 241×119, rotated 90° → effective 119×241 (tall pill), so
+// items stack vertically inside. Pitas use the same size whether the order
+// has 1 or 3 positions; drink is half the slot size.
+const BUBBLE_ITEM_SIZE = 132
+const BUBBLE_ITEM_SPACING = 70
+const BUBBLE_ITEM_X = 5  // horizontal nudge inside the bubble (right of center)
+const BUBBLE_DRINK_SCALE = 0.45  // drink size relative to a pita slot
 
 export class Client extends Container {
   readonly order: Order
@@ -17,7 +28,9 @@ export class Client extends Container {
 
   // Public so ClientQueue can attach the bubble to a top-most layer outside
   // this Container (so it ends up above table/kitchen z-wise).
-  readonly bubble: Sprite
+  readonly bubble: Container
+  private bubbleBg: Sprite
+  private orderSlots: Container[] = []
 
   private spine: Spine
   private walkT: number | null = null
@@ -52,12 +65,30 @@ export class Client extends Container {
 
     // Order bubble — sits to the right of the head, drawn above EVERYTHING.
     // Created here but ClientQueue parents it into a top-most bubbles layer.
-    // Position is in world coords (synced from Client.position in update).
-    this.bubble = new Sprite(tex('bubble'))
-    this.bubble.anchor.set(0.5, 0.5)
-    this.bubble.rotation = Math.PI / 2  // 90° clockwise
+    // Container itself is NOT rotated; only the backdrop is rotated 90°, so
+    // order item slots inside stay upright.
+    this.bubble = new Container()
     this.bubble.eventMode = 'none'
     this.bubble.visible = false
+    this.bubbleBg = new Sprite(tex('bubble'))
+    this.bubbleBg.anchor.set(0.5, 0.5)
+    this.bubbleBg.rotation = Math.PI / 2
+    this.bubble.addChild(this.bubbleBg)
+  }
+
+  // Populates the bubble with the given order items (1 or 3 positions).
+  setOrder(items: ReadonlyArray<OrderItem>): void {
+    for (const slot of this.orderSlots) slot.destroy({ children: true })
+    this.orderSlots = []
+
+    const startY = items.length === 1 ? 0 : -BUBBLE_ITEM_SPACING
+
+    for (let i = 0; i < items.length; i++) {
+      const slot = makeOrderSlot(items[i], BUBBLE_ITEM_SIZE)
+      slot.position.set(BUBBLE_ITEM_X, startY + i * BUBBLE_ITEM_SPACING)
+      this.bubble.addChild(slot)
+      this.orderSlots.push(slot)
+    }
   }
 
   walkIn(target: Point, onArrived: () => void): void {
@@ -116,4 +147,32 @@ export class Client extends Container {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
+}
+
+// Builds one order-item visual centered at (0,0) in its parent slot.
+function makeOrderSlot(item: OrderItem, size: number): Container {
+  const slot = new Container()
+  if (item.kind === 'drink') {
+    const drink = new Sprite(tex('drink'))
+    drink.anchor.set(0.5, 0.5)
+    // drink.png is 55×87 (taller than wide); fit half the slot height.
+    const fit = (size * BUBBLE_DRINK_SCALE) / 87
+    drink.scale.set(fit)
+    slot.addChild(drink)
+  } else {
+    // Closed-pita preview: render PSD layers in a sub-container scaled to fit
+    // a 200×200 PSD canvas into `size` and centered at (0,0).
+    const pita = new Container()
+    const fit = size / 200
+    pita.scale.set(fit)
+    pita.position.set(-100 * fit, -100 * fit)
+    const recipe: Recipe = { toppings: item.toppings }
+    for (const layer of closedPitaLayers(recipe)) {
+      const sp = new Sprite(tex(layer.tex))
+      applySpec(sp, layer.spec)
+      pita.addChild(sp)
+    }
+    slot.addChild(pita)
+  }
+  return slot
 }

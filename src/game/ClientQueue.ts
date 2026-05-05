@@ -4,6 +4,7 @@ import { Order } from './Order'
 import type { RecipeId } from '../recipes'
 import { layout, DESIGN_W } from '../layout'
 import type { SpineName } from '../assets'
+import { generateOrder } from '../pita/orders'
 
 // Full character pool. The first three fill the slots at scene start; the
 // remaining ones wait off-screen and rotate in as on-screen clients leave.
@@ -102,8 +103,9 @@ export class ClientQueue extends Container {
   private spawnAt(slotIdx: number, name: SpineName): void {
     const slot = this.slots[slotIdx]
     if (!slot) return
-    const order = new Order(['shawarma']) // dummy — order/bubble logic comes later
+    const order = new Order(['shawarma']) // legacy dummy — delivery logic TBD
     const client = new Client(order, name)
+    client.setOrder(generateOrder())
     client.slotIdx = slotIdx
     client.scale.set(layout.clientScale)
     client.position.set(-200, slot.y)

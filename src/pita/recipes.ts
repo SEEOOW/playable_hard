@@ -38,8 +38,8 @@ export const INGREDIENT_LAYERS: Record<PitaIngredient, ReadonlyArray<PitaLayer>>
     { tex: 'pita_meat_b', spec: r(51, 59, 95, 55) }, // upper row, in front
   ],
   fries: [
-    { tex: 'pita_fries_a', spec: r(48, 61, 54, 47) }, // left handful
-    { tex: 'pita_fries_b', spec: r(93, 79, 55, 47) }, // right handful
+    { tex: 'pita_fries_a', spec: r(41, 61, 60, 52) }, // left handful (psd/potato_new)
+    { tex: 'pita_fries_b', spec: r(90, 81, 61, 52) }, // right handful
   ],
   cucumber: [
     { tex: 'pita_cucumber', spec: r(52, 68, 48, 42) },
