@@ -84,7 +84,7 @@ export class Kitchen extends Container {
   layout(map: LayoutMap): void {
     applySpec(this.basket,   map.pita.basket)
     applySpec(this.tortilla, map.pita.tortilla)
-    this.spit.layout(map.spit)
+    this.spit.layout(map.spit, map.spitSpine)
     applySpec(this.knife, map.knife)
     applySpec(this.bowl,  map.pan)
     applySpec(this.fries, map.fries)

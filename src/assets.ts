@@ -1,4 +1,5 @@
 import { Assets, Texture } from 'pixi.js'
+import { Spine } from '@esotericsoftware/spine-pixi-v8'
 
 export type AssetName =
   // background (PSD: Layer 0 + table smartobject)
@@ -38,15 +39,46 @@ const MANIFEST: Record<AssetName, string> = {
   button_install: url('images/ui/button_install.png'),
 }
 
+// Spine skeletons. Files live in `assets_shawarma/spine_v42/` — copies of the
+// original Spine 4.1 assets with the version bumped to 4.2.0 so the only
+// available Pixi-v8 spine runtime (4.2) accepts them. Originals remain
+// untouched in `assets_shawarma/spine/`.
+export type SpineName = 'kebab_back' | 'kebab_front' | 'skewer_back' | 'skewer_front'
+
+const SPINE_MANIFEST: Record<SpineName, { json: string; atlas: string }> = {
+  kebab_back:   { json: url('spine_v42/kebab_back.json'),   atlas: url('spine_v42/kebab_back.atlas') },
+  kebab_front:  { json: url('spine_v42/kebab_front.json'),  atlas: url('spine_v42/kebab_front.atlas') },
+  skewer_back:  { json: url('spine_v42/skewer_back.json'),  atlas: url('spine_v42/skewer_back.atlas') },
+  skewer_front: { json: url('spine_v42/skewer_front.json'), atlas: url('spine_v42/skewer_front.atlas') },
+}
+
 export async function loadAssets(): Promise<void> {
-  const entries = (Object.keys(MANIFEST) as AssetName[]).map((alias) => ({
+  const texEntries = (Object.keys(MANIFEST) as AssetName[]).map((alias) => ({
     alias,
     src: MANIFEST[alias],
   }))
-  await Assets.load(entries)
+
+  const spineEntries: { alias: string; src: string }[] = []
+  for (const name of Object.keys(SPINE_MANIFEST) as SpineName[]) {
+    const m = SPINE_MANIFEST[name]
+    spineEntries.push({ alias: `${name}_skel`,  src: m.json })
+    spineEntries.push({ alias: `${name}_atlas`, src: m.atlas })
+  }
+
+  await Assets.load([...texEntries, ...spineEntries])
 }
 
 export function tex(name: AssetName): Texture {
   const t = Assets.get<Texture>(name)
   return t ?? Texture.WHITE
+}
+
+// Spine instance bound to the shared Pixi Ticker (default autoUpdate). Caller
+// chooses the animation; without `state.setAnimation(...)` the skeleton stays
+// in setup pose.
+export function makeSpine(name: SpineName): Spine {
+  return Spine.from({
+    skeleton: `${name}_skel`,
+    atlas:    `${name}_atlas`,
+  })
 }

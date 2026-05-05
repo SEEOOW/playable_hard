@@ -68,6 +68,9 @@ export function applyUiAnchor(
 
 export type MeatChunk = { texture: Extract<AssetName, 'meat1' | 'meat2'>; spec: LayerSpec }
 
+// Spine spit visuals (kebab_back + kebab_front) are positioned by root + uniform scale.
+export type SpineSpitPos = { x: number; y: number; scale: number }
+
 export type LayoutMap = {
   background: { back: LayerSpec; table: LayerSpec }
 
@@ -87,6 +90,9 @@ export type LayoutMap = {
 
   pitaClean: { pita1: LayerSpec; pita2: LayerSpec }
   meatStack: MeatChunk[]
+
+  // PLACEHOLDER — final coords TBD from PSD/layout-data.
+  spitSpine: SpineSpitPos
 
   // Screen-anchored UI. Edge offsets/sizes derived from PSD positions
   // assuming a 1280×720 reference frame.
@@ -155,6 +161,13 @@ export const layout: LayoutMap = {
     { texture: 'meat2', spec: s(559, 565, 114, 55) },
     { texture: 'meat1', spec: s(565, 553, 107, 63) },
   ],
+
+  // PLACEHOLDER — replace with PSD/layout-derived coords.
+  // Roughly fits the spine skeleton (~434×770) into the PSD grill rect
+  // (355,321..509,599). Anchor placed at bottom-center of the grill,
+  // assuming the spine root bone sits at the bottom of the figure.
+  // Replace once spine bones are calibrated against the actual grill cavity.
+  spitSpine: { x: 432, y: 580, scale: 0.25 },
 
   ui: {
     // PSD: coin (2, 0) 72x79 → top-left

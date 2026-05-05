@@ -1,0 +1,10 @@
+kebab_back.png
+size:1024,1024
+filter:Linear,Linear
+scale:0.7
+1st/meat_base_back
+bounds:2,2,265,463
+2st/meat_base_back
+bounds:2,467,304,539
+meat_texture_1_512
+bounds:308,648,358,358
