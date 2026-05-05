@@ -43,11 +43,12 @@ const MANIFEST: Record<AssetName, string> = {
 // original Spine 4.1 assets with the version bumped to 4.2.0 so the only
 // available Pixi-v8 spine runtime (4.2) accepts them. Originals remain
 // untouched in `assets_shawarma/spine/`.
-export type SpineName = 'kebab_back' | 'kebab_front' | 'skewer_back' | 'skewer_front'
+export type SpineName = 'kebab_back' | 'kebab_front' | 'kebab_cut' | 'skewer_back' | 'skewer_front'
 
 const SPINE_MANIFEST: Record<SpineName, { json: string; atlas: string }> = {
   kebab_back:   { json: url('spine_v42/kebab_back.json'),   atlas: url('spine_v42/kebab_back.atlas') },
   kebab_front:  { json: url('spine_v42/kebab_front.json'),  atlas: url('spine_v42/kebab_front.atlas') },
+  kebab_cut:    { json: url('spine_v42/kebab_cut.json'),    atlas: url('spine_v42/kebab_cut.atlas') },
   skewer_back:  { json: url('spine_v42/skewer_back.json'),  atlas: url('spine_v42/skewer_back.atlas') },
   skewer_front: { json: url('spine_v42/skewer_front.json'), atlas: url('spine_v42/skewer_front.atlas') },
 }

@@ -32,6 +32,16 @@ export const config = {
     // Sawing motion: knife oscillates horizontally while descending.
     sawAmp:        14,    // px deviation from sliceX
     sawFreq:       6,     // full cycles per slice
+    // kebab_cut overlay shown per slice. Within a single slice the texture
+    // swaps from small → big at `cutSwapRatio` of the slice duration; the
+    // small piece appears as the cut starts and the big piece replaces it
+    // by the time the knife reaches the bottom.
+    cutSkinSmall:  '01',
+    cutSkinLarge:  '15',  // patch 15 lives on kebab_cut_3 — the largest cut
+    cutSwapRatio:  0.5,
+    // Spine animation is 20s by default; speed up so the alpha fade-out
+    // (cut piece "rotated off-screen") finishes a few seconds after the slice.
+    cutTimeScale:  4,
   },
   coinsPerOrder: 10,
 } as const

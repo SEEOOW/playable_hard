@@ -31,6 +31,7 @@ export class Kitchen extends Container {
   private nextSlotIdx = 0
   private sliceT = 0
   private flyT = 0
+  private cutSwapped = false
   private knifeRest = new Point()
   private flyStart = new Point()
   private slotCenters: Point[] = [new Point(), new Point(), new Point()]
@@ -134,6 +135,10 @@ export class Kitchen extends Container {
     if (this.nextSlotIdx >= this.meatStack.length) return
     this.cookState = 'slicing'
     this.sliceT = 0
+    this.cutSwapped = false
+    // Cut overlay starts small at the top of the slice; swapped to large
+    // mid-way through (see runCooking). Spine alpha fades out post-slice.
+    this.spit.playCut(config.cooking.cutSkinSmall)
   }
 
   private runCooking(dt: number): void {
@@ -145,13 +150,23 @@ export class Kitchen extends Container {
       const saw = Math.sin(p * c.sawFreq * Math.PI * 2) * c.sawAmp
       this.knife.position.x = c.sliceX + saw
       this.knife.position.y = lerp(c.sliceY0, c.sliceY1, p)
+      // Mid-slice: swap the cut overlay from the small piece to the large one,
+      // keeping the spine alpha continuous so it just changes texture in place.
+      if (!this.cutSwapped && p >= c.cutSwapRatio) {
+        this.cutSwapped = true
+        this.spit.swapCutSkin(c.cutSkinLarge)
+      }
       if (p >= 1) {
         // Slice landed at the bottom of the meat — spawn fly-in for next slot.
         this.flyStart.set(
           this.knife.position.x + this.knife.width / 2,
           this.knife.position.y + this.knife.height / 2,
         )
-        this.meatStack[this.nextSlotIdx].visible = true
+        const sprite = this.meatStack[this.nextSlotIdx]
+        // Move sprite to fly-start BEFORE making it visible — otherwise it
+        // renders for one frame at its slot-center position (set in layout).
+        sprite.position.copyFrom(this.flyStart)
+        sprite.visible = true
         this.flyT = 0
         this.cookState = 'flying'
         // Knife snaps back to rest immediately so player can tap again sooner.
