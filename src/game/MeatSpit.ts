@@ -51,9 +51,7 @@ export class MeatSpit extends Container {
     // Grill is the bottom layer of the spit — the click target.
     this.grill.eventMode = 'static'
     this.grill.cursor = 'pointer'
-    const fire = () => this.onSliceTap?.()
-    this.grill.on('pointerdown', fire)
-    this.grill.on('pointertap',  fire)
+    this.grill.on('pointerdown', () => this.onSliceTap?.())
 
     // Idle loop on the meat (full-meat state). skewerBack has no animations —
     // stays in setup pose. skewerFront's '1st' selects which top stick is shown.

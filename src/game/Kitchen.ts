@@ -22,8 +22,10 @@ export class Kitchen extends Container {
   private plateSprites: Sprite[]
   private drinks: Sprite[]
   private tomatoSlices: Sprite[]
-  private pita1: Sprite
-  private pita2: Sprite
+  // One pita pair (pita1 + pita2 layers) per plate slot. Hidden until the
+  // player taps the pita station; one tap = pita on the first free plate.
+  private pita1Sprites: Sprite[]
+  private pita2Sprites: Sprite[]
   private meatStack: Sprite[]
 
   // Cooking sequence state machine: tap → slice → fly → idle (× 3 → done)
@@ -50,16 +52,27 @@ export class Kitchen extends Container {
     this.knife    = new Sprite(tex('knife'))
     this.bowl     = new Sprite(tex('bowl'))
     this.fries    = new Sprite(tex('fries'))
-    this.pita1    = new Sprite(tex('pita1'))
-    this.pita2    = new Sprite(tex('pita2'))
 
     this.cucumberSlices = makeMany('cucumber', 3)
     this.plateSprites   = makeMany('plate', 3)
     this.drinks         = makeMany('drink', 3)
     this.tomatoSlices   = makeMany('tomato', 6)
+    this.pita1Sprites   = makeMany('pita1', 3)
+    this.pita2Sprites   = makeMany('pita2', 3)
     this.meatStack      = [new Sprite(), new Sprite(), new Sprite()]
     // Bowl starts empty — meat is revealed slot-by-slot on tap.
     this.meatStack.forEach((s) => { s.visible = false })
+    // Plates start empty — pita appears only after the player taps the basket.
+    this.pita1Sprites.forEach((s) => { s.visible = false })
+    this.pita2Sprites.forEach((s) => { s.visible = false })
+
+    // Pita station is the basket+tortilla pile. Click target is the basket
+    // (larger sprite below); tortilla on top stays non-interactive so taps
+    // pass through to it.
+    this.basket.eventMode = 'static'
+    this.basket.cursor = 'pointer'
+    this.tortilla.eventMode = 'none'
+    this.basket.on('pointerdown', () => this.placePita())
 
     this.addChild(
       this.basket,
@@ -72,10 +85,21 @@ export class Kitchen extends Container {
       ...this.plateSprites,
       ...this.drinks,
       ...this.tomatoSlices,
-      this.pita1,
-      this.pita2,
+      ...this.pita1Sprites,
+      ...this.pita2Sprites,
       ...this.meatStack,
     )
+  }
+
+  // Reveals one pita pair on the first plate that doesn't have one yet.
+  // No-op if every plate is already topped.
+  private placePita(): void {
+    for (let i = 0; i < this.pita1Sprites.length; i++) {
+      if (this.pita1Sprites[i].visible) continue
+      this.pita1Sprites[i].visible = true
+      this.pita2Sprites[i].visible = true
+      return
+    }
   }
 
   setActiveRecipes(recipes: RecipeId[]): void {
@@ -109,8 +133,15 @@ export class Kitchen extends Container {
     applyMany(this.drinks,          map.juice)
     applyMany(this.tomatoSlices,    map.tomatoSlices)
 
-    applySpec(this.pita1, map.pitaClean.pita1)
-    applySpec(this.pita2, map.pitaClean.pita2)
+    // Pita layers — propagate the PSD pita-on-plate1 offsets to plates 2 and 3.
+    const p0 = map.plates[0]
+    const dx1 = map.pitaClean.pita1.x - p0.x, dy1 = map.pitaClean.pita1.y - p0.y
+    const dx2 = map.pitaClean.pita2.x - p0.x, dy2 = map.pitaClean.pita2.y - p0.y
+    for (let i = 0; i < this.pita1Sprites.length; i++) {
+      const plate = map.plates[i]
+      applySpec(this.pita1Sprites[i], { x: plate.x + dx1, y: plate.y + dy1, w: map.pitaClean.pita1.w, h: map.pitaClean.pita1.h })
+      applySpec(this.pita2Sprites[i], { x: plate.x + dx2, y: plate.y + dy2, w: map.pitaClean.pita2.w, h: map.pitaClean.pita2.h })
+    }
 
     // Meat slices use center anchor — easier to fly in and to flip-mirror
     // in place. Slot centers are stored for the cooking sequence.
