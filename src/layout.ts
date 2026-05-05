@@ -130,17 +130,17 @@ export const layout: LayoutMap = {
   // characters of different heights share the same head Y (feet vary).
   // Middle client centered horizontally; outer two ±200px around the center.
   clientSlots: [
-    new Point(420, 170),
-    new Point(620, 170),
-    new Point(820, 170),
+    new Point(400, 190),
+    new Point(600, 190),
+    new Point(800, 190),
   ],
   // PLACEHOLDER — characters are ~600–770px tall; halve them for now.
-  clientScale: 0.5,
+  clientScale: 0.45,
 
   // PLACEHOLDER — tweak to align the bubble with the head.
   bubble: {
-    offset: { x: 75, y: 5 },
-    scale:  { x: 0.75, y: 0.8 },
+    offset: { x: 70, y: 5 },
+    scale:  { x: 0.7, y: 0.7 },
   },
 
   // Per-character horizontal nudges (world pixels). Bubble stays at slot.
