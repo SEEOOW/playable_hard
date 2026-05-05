@@ -24,6 +24,9 @@ export class GameScene extends Container {
   private table: Sprite
   private clientQueue: ClientQueue
   private kitchen: Kitchen
+  // Top-most layer in the world — order bubbles live here so they render
+  // above table, kitchen, and the clients themselves.
+  private bubblesLayer: Container
 
   // UI children
   private soundButton: Sprite
@@ -47,10 +50,12 @@ export class GameScene extends Container {
 
     this.clientQueue = new ClientQueue()
     this.kitchen = new Kitchen()
+    this.bubblesLayer = new Container()
+    this.clientQueue.bubblesLayer = this.bubblesLayer
 
-    // z-order: back wall → clients (behind the table) → table → kitchen.
-    // Clients sit between back and table so the table partially occludes them.
-    this.worldRoot.addChild(this.back, this.clientQueue, this.table, this.kitchen)
+    // z-order: back wall → clients (behind the table) → table → kitchen
+    // → bubbles (above everything in world).
+    this.worldRoot.addChild(this.back, this.clientQueue, this.table, this.kitchen, this.bubblesLayer)
 
     // UI -------------------------------------------------------------------
     this.uiRoot = new Container()

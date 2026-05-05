@@ -14,6 +14,10 @@ export class ClientQueue extends Container {
   onClientLeft:  ((c: Client, satisfied: boolean) => void) | null = null
   onAllDone:     (() => void) | null = null
 
+  // External top-most container (sibling in worldRoot) that parents the
+  // bubbles so they render above table/kitchen.
+  bubblesLayer: Container | null = null
+
   private clients: Client[] = []
   private slots: Point[] = []
 
@@ -42,6 +46,7 @@ export class ClientQueue extends Container {
 
     client.walkOut(target, () => {
       this.removeChild(client)
+      this.bubblesLayer?.removeChild(client.bubble)
       const idx = this.clients.indexOf(client)
       if (idx >= 0) this.clients.splice(idx, 1)
       this.onClientLeft?.(client, false)
@@ -106,6 +111,12 @@ export class ClientQueue extends Container {
     // is drawn behind already-standing ones and doesn't overlap them mid-walk.
     this.addChildAt(client, 0)
     this.clients.push(client)
+    // Bubble lives in a top-most sibling layer so it renders above table/kitchen.
+    // Scale comes from layout.bubble (independent of clientScale).
+    if (this.bubblesLayer) {
+      client.bubble.scale.set(layout.bubble.scale.x, layout.bubble.scale.y)
+      this.bubblesLayer.addChild(client.bubble)
+    }
     client.walkIn(slot, () => { /* no-op for now */ })
   }
 }

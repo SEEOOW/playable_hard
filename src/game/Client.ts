@@ -1,8 +1,9 @@
-import { Container, Point } from 'pixi.js'
+import { Container, Point, Sprite } from 'pixi.js'
 import { Spine } from '@esotericsoftware/spine-pixi-v8'
 import { Order } from './Order'
 import type { RecipeId } from '../recipes'
-import { makeSpine, type SpineName } from '../assets'
+import { makeSpine, tex, type SpineName } from '../assets'
+import { layout } from '../layout'
 import { config } from '../config'
 
 export type ClientState = 'walkingIn' | 'waiting' | 'leaving'
@@ -13,6 +14,10 @@ export class Client extends Container {
   slotIdx = 0
   state: ClientState = 'walkingIn'
   patienceLeft = config.client.patience
+
+  // Public so ClientQueue can attach the bubble to a top-most layer outside
+  // this Container (so it ends up above table/kitchen z-wise).
+  readonly bubble: Sprite
 
   private spine: Spine
   private walkT: number | null = null
@@ -35,11 +40,24 @@ export class Client extends Container {
     // (data.y + data.height); rendering flips Y, and the parent Client.scale
     // propagates to this offset, so we set it in raw spine units.
     const d = this.spine.skeleton.data
+    // World-pixel x-nudge per character (e.g. shift grandpa 10px left of slot).
+    // Stored in world pixels in layout, converted to spine-local via 1/scale.
+    const nudgeWorldX = layout.clientSpineOffsetX[spineName] ?? 0
+    this.spine.position.x = nudgeWorldX / layout.clientScale
     this.spine.position.y = d.y + d.height
 
     this.addChild(this.spine)
     // No dedicated walk animation in the asset — idle from the start.
     this.spine.state.setAnimation(0, 'idle', true)
+
+    // Order bubble — sits to the right of the head, drawn above EVERYTHING.
+    // Created here but ClientQueue parents it into a top-most bubbles layer.
+    // Position is in world coords (synced from Client.position in update).
+    this.bubble = new Sprite(tex('bubble'))
+    this.bubble.anchor.set(0.5, 0.5)
+    this.bubble.rotation = Math.PI / 2  // 90° clockwise
+    this.bubble.eventMode = 'none'
+    this.bubble.visible = false
   }
 
   walkIn(target: Point, onArrived: () => void): void {
@@ -57,6 +75,7 @@ export class Client extends Container {
 
   walkOut(target: Point, onDone: () => void): void {
     this.state = 'leaving'
+    this.bubble.visible = false
     this.walkStart.copyFrom(this.position)
     this.walkTarget.copyFrom(target)
     this.walkT = 0
@@ -70,10 +89,14 @@ export class Client extends Container {
       const p = Math.min(this.walkT / this.walkDur, 1)
       this.position.x = lerp(this.walkStart.x, this.walkTarget.x, p)
       this.position.y = lerp(this.walkStart.y, this.walkTarget.y, p)
+      this.syncBubble()
       if (p >= 1) {
         this.walkT = null
         // Only walk-in transitions to waiting; walk-out keeps state 'leaving'.
-        if (this.state === 'walkingIn') this.state = 'waiting'
+        if (this.state === 'walkingIn') {
+          this.state = 'waiting'
+          this.bubble.visible = true
+        }
         const cb = this.onArrivedCb
         this.onArrivedCb = null
         cb?.()
@@ -81,6 +104,13 @@ export class Client extends Container {
     }
     if (this.state !== 'waiting') return
     this.patienceLeft -= dt
+  }
+
+  // Bubble sits in a sibling top-most layer in world space, so we sync its
+  // position from Client.position + a configurable world-pixel offset.
+  private syncBubble(): void {
+    const off = layout.bubble.offset
+    this.bubble.position.set(this.position.x + off.x, this.position.y + off.y)
   }
 }
 

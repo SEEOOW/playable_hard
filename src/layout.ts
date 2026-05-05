@@ -1,5 +1,5 @@
 import { Point, Sprite } from 'pixi.js'
-import type { AssetName } from './assets'
+import type { AssetName, SpineName } from './assets'
 
 // Single design canvas — sourced from psd/lvl.psd. World content is cover-scaled
 // into the actual viewport (may crop at edges in extreme aspects). UI is
@@ -83,6 +83,18 @@ export type LayoutMap = {
   clientSlots: Point[]
   clientScale: number
 
+  // Order bubble — same for every client. Offset is in world (design) pixels
+  // from the client's anchor; scale.x/y are independent so it can be squashed.
+  bubble: {
+    offset: { x: number; y: number }
+    scale:  { x: number; y: number }
+  }
+
+  // Per-character horizontal offset of the spine inside its Client, in WORLD
+  // (design) pixels. Negative shifts the character left of the slot anchor;
+  // the bubble (anchored to the slot) stays put. Missing entries = 0.
+  clientSpineOffsetX: Partial<Record<SpineName, number>>
+
   pita: { basket: LayerSpec; tortilla: LayerSpec }
   fries: LayerSpec
   knife: LayerSpec
@@ -118,12 +130,23 @@ export const layout: LayoutMap = {
   // characters of different heights share the same head Y (feet vary).
   // Middle client centered horizontally; outer two ±200px around the center.
   clientSlots: [
-    new Point(440, 170),  // 640 - 200
-    new Point(660, 170),  // canvas center (1280 / 2)
-    new Point(860, 170),  // 640 + 200
+    new Point(420, 170),
+    new Point(620, 170),
+    new Point(820, 170),
   ],
   // PLACEHOLDER — characters are ~600–770px tall; halve them for now.
   clientScale: 0.5,
+
+  // PLACEHOLDER — tweak to align the bubble with the head.
+  bubble: {
+    offset: { x: 75, y: 5 },
+    scale:  { x: 0.75, y: 0.8 },
+  },
+
+  // Per-character horizontal nudges (world pixels). Bubble stays at slot.
+  clientSpineOffsetX: {
+    old_grambler: -10,
+  },
 
   pita: {
     basket:   s(679, 551, 150, 104),
