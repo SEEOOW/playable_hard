@@ -162,11 +162,12 @@ export class GameScene extends Container {
       this.refreshHint()
     }
 
-    this.clientQueue.onClientLeft = (_client, satisfied) => {
-      // Coins are now added per-delivered-position via the flying-coin FX
+    this.clientQueue.onClientLeft = (_client, _satisfied) => {
+      // Coins are added per-delivered-position via the flying-coin FX
       // (see onItemDelivered below); no bulk add on walk-out.
-      if (satisfied && this.visitors.bumpServed()) {
-        // 5th fully-served guest → fire the App Store redirect.
+      // Visitor counter ticks for every leaver — cheat dismissals included —
+      // so the level always ends after exactly 5 guests, however they left.
+      if (this.visitors.bumpServed()) {
         openStore()
       }
       this.kitchen.setActiveRecipes(this.clientQueue.activeRecipes())
