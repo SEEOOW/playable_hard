@@ -8,7 +8,7 @@ import type { Ingredient, RecipeId } from '../recipes'
 import { PitaAssembly } from '../pita/PitaAssembly'
 import { PITA_ORIGIN_DX, PITA_ORIGIN_DY, type PitaIngredient, type PitaTopping } from '../pita/recipes'
 
-type CookState = 'idle' | 'slicing' | 'flying' | 'done'
+type CookState = 'idle' | 'slicing'
 
 export class Kitchen extends Container {
   readonly spit: MeatSpit
@@ -40,14 +40,15 @@ export class Kitchen extends Container {
   private pitas: PitaAssembly[]
   private meatStack: Sprite[]
 
-  // Cooking sequence state machine: tap → slice → fly → idle (× 3 → done)
+  // Each successful tap on the spit places a portion in the bowl IMMEDIATELY
+  // (visible + counted toward the consumption limit) and, if the knife is
+  // free, kicks off the slicing animation as cosmetic feedback. Rapid taps
+  // stack portions without queueing animations.
   private cookState: CookState = 'idle'
   private nextSlotIdx = 0
   private sliceT = 0
-  private flyT = 0
   private cutSwapped = false
   private knifeRest = new Point()
-  private flyStart = new Point()
   private slotCenters: Point[] = [new Point(), new Point(), new Point()]
 
   private activeRecipes: RecipeId[] = []
@@ -67,6 +68,12 @@ export class Kitchen extends Container {
     this.knife    = new Sprite(tex('knife'))
     this.bowl     = new Sprite(tex('bowl'))
     this.fries    = new Sprite(tex('fries'))
+
+    // Knife sweeps over the spit during the slice animation; without this it
+    // would catch pointerdown when overlapping the grill hit area, swallowing
+    // the player's tap. Visual stays on top of the spit; only events pass
+    // through to the meat hit zone below.
+    this.knife.eventMode = 'none'
 
     this.cucumberSlices = makeMany('cucumber', 3)
     this.plateSprites   = makeMany('plate', 3)
@@ -212,14 +219,10 @@ export class Kitchen extends Container {
         break
       }
     }
-    // Bowl emptied while we're not mid-slice/mid-fly → unlock slicing again so
-    // the player can carve a fresh batch. Without this, nextSlotIdx stays at
-    // meatStack.length and requestSlice() rejects every tap.
-    if (
-      (this.cookState === 'done' || this.cookState === 'idle')
-      && !this.hasAvailableMeat()
-    ) {
-      this.cookState = 'idle'
+    // Bowl emptied → reset the slot pointer so the next tap fills slot 0
+    // again. Slicing animation, if running, doesn't block this — it's purely
+    // visual and the bookkeeping moves with consumption.
+    if (!this.hasAvailableMeat()) {
       this.nextSlotIdx = 0
     }
   }
@@ -307,60 +310,41 @@ export class Kitchen extends Container {
     this.knifeRest.set(map.knife.x, map.knife.y)
   }
 
-  // Called from MeatSpit.onSliceTap. Starts a slice if idle and slots remain.
+  // Called from MeatSpit.onSliceTap. Each successful tap places one portion in
+  // the bowl IMMEDIATELY so the player sees and can spend it without waiting
+  // for the slice animation. The knife/cut animation kicks off only when the
+  // previous one has finished — extra taps stack portions silently.
   private requestSlice(): void {
-    if (this.cookState !== 'idle') return
     if (this.nextSlotIdx >= this.meatStack.length) return
-    this.cookState = 'slicing'
-    this.sliceT = 0
-    this.cutSwapped = false
-    // Cut overlay starts small at the top of the slice; swapped to large
-    // mid-way through (see runCooking). Spine alpha fades out post-slice.
-    this.spit.playCut(config.cooking.cutSkinSmall)
+    this.meatStack[this.nextSlotIdx].visible = true
+    this.nextSlotIdx += 1
+    if (this.cookState === 'idle') {
+      this.cookState = 'slicing'
+      this.sliceT = 0
+      this.cutSwapped = false
+      // Cut overlay starts small at the top of the slice; swapped to large
+      // mid-way through (see runCooking). Spine alpha fades out post-slice.
+      this.spit.playCut(config.cooking.cutSkinSmall)
+    }
   }
 
   private runCooking(dt: number): void {
+    if (this.cookState !== 'slicing') return
     const c = config.cooking
-
-    if (this.cookState === 'slicing') {
-      this.sliceT += dt
-      const p = Math.min(this.sliceT / c.sliceDuration, 1)
-      const saw = Math.sin(p * c.sawFreq * Math.PI * 2) * c.sawAmp
-      this.knife.position.x = c.sliceX + saw
-      this.knife.position.y = lerp(c.sliceY0, c.sliceY1, p)
-      // Mid-slice: swap the cut overlay from the small piece to the large one,
-      // keeping the spine alpha continuous so it just changes texture in place.
-      if (!this.cutSwapped && p >= c.cutSwapRatio) {
-        this.cutSwapped = true
-        this.spit.swapCutSkin(c.cutSkinLarge)
-      }
-      if (p >= 1) {
-        // Slice landed at the bottom of the meat — spawn fly-in for next slot.
-        this.flyStart.set(
-          this.knife.position.x + this.knife.width / 2,
-          this.knife.position.y + this.knife.height / 2,
-        )
-        const sprite = this.meatStack[this.nextSlotIdx]
-        // Move sprite to fly-start BEFORE making it visible — otherwise it
-        // renders for one frame at its slot-center position (set in layout).
-        sprite.position.copyFrom(this.flyStart)
-        sprite.visible = true
-        this.flyT = 0
-        this.cookState = 'flying'
-        // Knife snaps back to rest immediately so player can tap again sooner.
-        this.knife.position.copyFrom(this.knifeRest)
-      }
-    } else if (this.cookState === 'flying') {
-      this.flyT += dt
-      const p = Math.min(this.flyT / c.flyDuration, 1)
-      const eased = 1 - (1 - p) * (1 - p)
-      const sprite = this.meatStack[this.nextSlotIdx]
-      sprite.position.x = lerp(this.flyStart.x, this.slotCenters[this.nextSlotIdx].x, eased)
-      sprite.position.y = lerp(this.flyStart.y, this.slotCenters[this.nextSlotIdx].y, eased)
-      if (p >= 1) {
-        this.nextSlotIdx += 1
-        this.cookState = this.nextSlotIdx >= this.meatStack.length ? 'done' : 'idle'
-      }
+    this.sliceT += dt
+    const p = Math.min(this.sliceT / c.sliceDuration, 1)
+    const saw = Math.sin(p * c.sawFreq * Math.PI * 2) * c.sawAmp
+    this.knife.position.x = c.sliceX + saw
+    this.knife.position.y = lerp(c.sliceY0, c.sliceY1, p)
+    // Mid-slice: swap the cut overlay from the small piece to the large one,
+    // keeping the spine alpha continuous so it just changes texture in place.
+    if (!this.cutSwapped && p >= c.cutSwapRatio) {
+      this.cutSwapped = true
+      this.spit.swapCutSkin(c.cutSkinLarge)
+    }
+    if (p >= 1) {
+      this.cookState = 'idle'
+      this.knife.position.copyFrom(this.knifeRest)
     }
   }
 }

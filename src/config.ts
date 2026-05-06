@@ -26,7 +26,7 @@ export const config = {
     cooldown: 3.0,  // seconds before a tapped drink reappears
   },
   cooking: {
-    sliceDuration: 1.8,   // knife top→bottom pass per tap, sec
+    sliceDuration: 0.8,   // knife top→bottom pass per tap, sec
     flyDuration:   0.4,   // slice flies from knife to bowl slot, sec
     // Vertical slicing path (knife sprite top-left during slice).
     sliceX:        386,   // base x — blade roughly aligned with meat center
@@ -34,7 +34,7 @@ export const config = {
     sliceY1:       500,   // end at meat bottom (PSD spit y=599)
     // Sawing motion: knife oscillates horizontally while descending.
     sawAmp:        14,    // px deviation from sliceX
-    sawFreq:       6,     // full cycles per slice
+    sawFreq:       3,     // full cycles per slice
     // kebab_cut overlay shown per slice. Within a single slice the texture
     // swaps from small → big at `cutSwapRatio` of the slice duration; the
     // small piece appears as the cut starts and the big piece replaces it
