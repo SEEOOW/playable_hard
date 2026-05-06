@@ -5,8 +5,8 @@ import type { RecipeId } from '../recipes'
 import { makeSpine, tex, type SpineName } from '../assets'
 import { applySpec, layout } from '../layout'
 import { config } from '../config'
-import { closedPitaLayers, type Recipe } from '../pita/recipes'
-import type { OrderItem } from '../pita/orders'
+import { closedPitaLayers, type Recipe, type PitaTopping } from '../pita/recipes'
+import { priceForItem, type OrderItem } from '../pita/orders'
 
 export type ClientState = 'walkingIn' | 'waiting' | 'leaving'
 
@@ -18,6 +18,9 @@ const BUBBLE_ITEM_SIZE = 132
 const BUBBLE_ITEM_SPACING = 70
 const BUBBLE_ITEM_X = 5  // horizontal nudge inside the bubble (right of center)
 const BUBBLE_DRINK_SCALE = 0.45  // drink size relative to a pita slot
+const BUBBLE_CHECK_SIZE = 45  // checkmark fits comfortably inside a slot
+
+type ClientOrderItem = OrderItem & { delivered: boolean; slot: Container }
 
 export class Client extends Container {
   readonly order: Order
@@ -30,7 +33,7 @@ export class Client extends Container {
   // this Container (so it ends up above table/kitchen z-wise).
   readonly bubble: Container
   private bubbleBg: Sprite
-  private orderSlots: Container[] = []
+  private orderItems: ClientOrderItem[] = []
 
   private spine: Spine
   private walkT: number | null = null
@@ -78,8 +81,8 @@ export class Client extends Container {
 
   // Populates the bubble with the given order items (1 or 3 positions).
   setOrder(items: ReadonlyArray<OrderItem>): void {
-    for (const slot of this.orderSlots) slot.destroy({ children: true })
-    this.orderSlots = []
+    for (const it of this.orderItems) it.slot.destroy({ children: true })
+    this.orderItems = []
 
     const startY = items.length === 1 ? 0 : -BUBBLE_ITEM_SPACING
 
@@ -87,8 +90,56 @@ export class Client extends Container {
       const slot = makeOrderSlot(items[i], BUBBLE_ITEM_SIZE)
       slot.position.set(BUBBLE_ITEM_X, startY + i * BUBBLE_ITEM_SPACING)
       this.bubble.addChild(slot)
-      this.orderSlots.push(slot)
+      this.orderItems.push(makeOrderEntry(items[i], slot))
     }
+  }
+
+  // Tries to deliver the given pita assembly to one of this client's open pita
+  // slots — exact topping-set match required, and the pita must contain meat
+  // (open pitas without meat aren't a valid closed-pita order).
+  tryDeliverPita(assemblyToppings: ReadonlyArray<PitaTopping>, hasMeat: boolean): boolean {
+    if (!hasMeat) return false
+    const want = new Set(assemblyToppings)
+    for (const it of this.orderItems) {
+      if (it.delivered) continue
+      if (it.kind !== 'pita') continue
+      if (!sameSet(it.toppings, want)) continue
+      this.markDelivered(it)
+      return true
+    }
+    return false
+  }
+
+  // First open drink slot, if any.
+  tryDeliverDrink(): boolean {
+    for (const it of this.orderItems) {
+      if (it.delivered) continue
+      if (it.kind !== 'drink') continue
+      this.markDelivered(it)
+      return true
+    }
+    return false
+  }
+
+  isFullyDelivered(): boolean {
+    return this.orderItems.length > 0 && this.orderItems.every((i) => i.delivered)
+  }
+
+  // Total coin reward for this client's order — sum of all item prices.
+  totalPrice(): number {
+    let sum = 0
+    for (const it of this.orderItems) sum += priceForItem(it)
+    return sum
+  }
+
+  private markDelivered(it: ClientOrderItem): void {
+    it.delivered = true
+    it.slot.removeChildren()
+    const check = new Sprite(tex('check_mark'))
+    check.anchor.set(0.5, 0.5)
+    const fit = BUBBLE_CHECK_SIZE / Math.max(check.texture.width, check.texture.height)
+    check.scale.set(fit)
+    it.slot.addChild(check)
   }
 
   walkIn(target: Point, onArrived: () => void): void {
@@ -147,6 +198,17 @@ export class Client extends Container {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
+}
+
+function sameSet(a: ReadonlyArray<string>, b: Set<string>): boolean {
+  if (a.length !== b.size) return false
+  for (const v of a) if (!b.has(v)) return false
+  return true
+}
+
+function makeOrderEntry(item: OrderItem, slot: Container): ClientOrderItem {
+  if (item.kind === 'drink') return { kind: 'drink', delivered: false, slot }
+  return { kind: 'pita', toppings: [...item.toppings], delivered: false, slot }
 }
 
 // Builds one order-item visual centered at (0,0) in its parent slot.

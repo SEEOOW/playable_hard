@@ -13,6 +13,12 @@ type CookState = 'idle' | 'slicing' | 'flying' | 'done'
 export class Kitchen extends Container {
   readonly spit: MeatSpit
   onPlateReady: ((plate: Plate) => void) | null = null
+  // Tap on a built pita: outer code (Scene → ClientQueue) returns true if it
+  // was delivered to a waiting client, in which case the plate slot is reset.
+  onPitaTap:  ((p: PitaAssembly) => boolean) | null = null
+  // Tap on a drink: outer code returns true if the drink was accepted by a
+  // waiting client, triggering the reappear cooldown. No-op on no match.
+  onDrinkTap: ((idx: number) => boolean) | null = null
 
   // PSD-mirrored decor + interactives
   private basket: Sprite
@@ -84,8 +90,14 @@ export class Kitchen extends Container {
     this.cucumberSlices.forEach((s) => setupTapAdd(s, () => this.addIngredient('cucumber')))
     this.tomatoSlices.forEach((s) => setupTapAdd(s, () => this.addIngredient('tomato')))
     // Drinks aren't placed inside the pita — they're a separate order item.
-    // Tap → hide → reappear after `config.drink.cooldown` seconds.
-    this.drinks.forEach((sprite, idx) => setupTapAdd(sprite, () => this.takeDrink(idx)))
+    // Tap → try to deliver; on success hide + reappear after cooldown.
+    this.drinks.forEach((sprite, idx) => setupTapAdd(sprite, () => this.tryDeliverDrink(idx)))
+
+    // Built pitas can be delivered by tapping them. Each PitaAssembly forwards
+    // its tap to Kitchen, which delegates the match attempt to the outer scene.
+    for (const pita of this.pitas) {
+      pita.onTap = (p) => this.tryDeliverPita(p)
+    }
 
     this.addChild(
       this.basket,
@@ -140,8 +152,18 @@ export class Kitchen extends Container {
     for (let i = this.meatStack.length - 1; i >= 0; i--) {
       if (this.meatStack[i].visible) {
         this.meatStack[i].visible = false
-        return
+        break
       }
+    }
+    // Bowl emptied while we're not mid-slice/mid-fly → unlock slicing again so
+    // the player can carve a fresh batch. Without this, nextSlotIdx stays at
+    // meatStack.length and requestSlice() rejects every tap.
+    if (
+      (this.cookState === 'done' || this.cookState === 'idle')
+      && !this.hasAvailableMeat()
+    ) {
+      this.cookState = 'idle'
+      this.nextSlotIdx = 0
     }
   }
 
@@ -176,10 +198,18 @@ export class Kitchen extends Container {
     }
   }
 
-  private takeDrink(idx: number): void {
+  private tryDeliverDrink(idx: number): void {
     if (!this.drinks[idx].visible) return
+    if (!this.onDrinkTap?.(idx)) return
     this.drinks[idx].visible = false
     this.drinkCooldown[idx] = config.drink.cooldown
+  }
+
+  private tryDeliverPita(assembly: PitaAssembly): void {
+    if (!assembly.hasPita()) return
+    if (this.onPitaTap?.(assembly)) {
+      assembly.reset()
+    }
   }
 
   layout(map: LayoutMap): void {

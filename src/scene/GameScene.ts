@@ -131,7 +131,7 @@ export class GameScene extends Container {
 
     this.clientQueue.onClientLeft = (client, satisfied) => {
       if (satisfied) {
-        this.coins.add(config.coinsPerOrder, client.position.clone())
+        this.coins.add(client.totalPrice(), client.position.clone())
       }
       this.kitchen.setActiveRecipes(this.clientQueue.activeRecipes())
       this.refreshHint()
@@ -142,6 +142,16 @@ export class GameScene extends Container {
     this.kitchen.onPlateReady = (plate) => {
       plate.onTap = (p) => this.handlePlateTap(p)
       this.refreshHint()
+    }
+
+    // Tap on a finished pita / drink → try to match an open slot in any
+    // waiting client's bubble. On match, Kitchen resets the slot (pita) or
+    // hides the drink for its cooldown.
+    this.kitchen.onPitaTap = (assembly) => {
+      return this.clientQueue.tryDeliverPita(assembly.toppings(), assembly.hasMeat())
+    }
+    this.kitchen.onDrinkTap = (_idx) => {
+      return this.clientQueue.tryDeliverDrink()
     }
 
     this.cta.onClick = () => openStore()

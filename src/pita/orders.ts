@@ -7,6 +7,24 @@ export type OrderItem =
   | { kind: 'drink' }
   | { kind: 'pita'; toppings: PitaTopping[] }
 
+// Coin reward per ingredient. Pita base ("лепёшка") and meat are implicit
+// in every closed pita; toppings are charged on top.
+export const PRICE = {
+  pita: 3,
+  meat: 5,
+  cucumber: 4,
+  fries: 3,
+  tomato: 2,
+  drink: 5,
+} as const
+
+export function priceForItem(item: OrderItem): number {
+  if (item.kind === 'drink') return PRICE.drink
+  let sum = PRICE.pita + PRICE.meat
+  for (const t of item.toppings) sum += PRICE[t]
+  return sum
+}
+
 const TOPPINGS: ReadonlyArray<PitaTopping> = ['cucumber', 'fries', 'tomato']
 
 export function generateOrder(): OrderItem[] {

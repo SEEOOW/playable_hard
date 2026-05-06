@@ -5,6 +5,7 @@ import type { RecipeId } from '../recipes'
 import { layout, DESIGN_W } from '../layout'
 import type { SpineName } from '../assets'
 import { generateOrder } from '../pita/orders'
+import type { PitaTopping } from '../pita/recipes'
 
 // Full character pool. The first three fill the slots at scene start; the
 // remaining ones wait off-screen and rotate in as on-screen clients leave.
@@ -29,28 +30,55 @@ export class ClientQueue extends Container {
     }
   }
 
-  // Sends the first waiting client off-screen right. A replacement walks in
-  // IN PARALLEL — the slot doesn't sit empty for the full walk-out duration.
+  // Sends the first waiting client off-screen right.
   dismissNext(): boolean {
     const client = this.clients.find((c) => c.state === 'waiting')
     if (!client) return false
+    this.dismissClient(client, false)
+    return true
+  }
+
+  // Tap-on-pita delivery. Returns true if some waiting client's open pita slot
+  // matches the assembly's toppings (set equality + meat present); marks that
+  // slot delivered, and dismisses the client when their order is fully done.
+  tryDeliverPita(toppings: ReadonlyArray<PitaTopping>, hasMeat: boolean): boolean {
+    for (const c of this.clients) {
+      if (c.state !== 'waiting') continue
+      if (!c.tryDeliverPita(toppings, hasMeat)) continue
+      if (c.isFullyDelivered()) this.dismissClient(c, true)
+      return true
+    }
+    return false
+  }
+
+  // Tap-on-drink delivery. Same shape as tryDeliverPita, but matches any
+  // open drink slot regardless of contents.
+  tryDeliverDrink(): boolean {
+    for (const c of this.clients) {
+      if (c.state !== 'waiting') continue
+      if (!c.tryDeliverDrink()) continue
+      if (c.isFullyDelivered()) this.dismissClient(c, true)
+      return true
+    }
+    return false
+  }
+
+  // Walk-out for a specific client, replenishing the slot in parallel so the
+  // counter doesn't sit empty for the full walk-out duration. `satisfied`
+  // distinguishes a paid order from a manual dev dismissal.
+  private dismissClient(client: Client, satisfied: boolean): void {
     const slotIdx = client.slotIdx
     const target = new Point(DESIGN_W + 200, client.position.y)
     // Push the leaver to the BOTTOM of the queue's child stack so they walk
     // out behind any clients still standing in their slots.
     this.setChildIndex(client, 0)
-
-    // Spawn the replacement now so walk-in overlaps walk-out. If the pool is
-    // temporarily exhausted (multiple fast dismissals stacking), the recovery
-    // pass in the walk-out callback catches up after each leaver is removed.
     this.fillSlot(slotIdx, client.spineName)
-
     client.walkOut(target, () => {
       this.removeChild(client)
       this.bubblesLayer?.removeChild(client.bubble)
       const idx = this.clients.indexOf(client)
       if (idx >= 0) this.clients.splice(idx, 1)
-      this.onClientLeft?.(client, false)
+      this.onClientLeft?.(client, satisfied)
       // Catch any slot whose replenishment was skipped earlier (pool empty).
       for (let i = 0; i < this.slots.length; i++) {
         if (!this.clients.some((c) => c.slotIdx === i)) {
@@ -58,7 +86,6 @@ export class ClientQueue extends Container {
         }
       }
     })
-    return true
   }
 
   findMatching(recipe: RecipeId): Client | null {
