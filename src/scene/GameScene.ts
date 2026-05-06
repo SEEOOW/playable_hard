@@ -154,6 +154,10 @@ export class GameScene extends Container {
       return this.clientQueue.tryDeliverDrink()
     }
 
+    // Smart Cooking feed: lets Kitchen veto basket placements and ingredient
+    // additions that don't lead to any active order.
+    this.kitchen.activeOrderToppings = () => this.clientQueue.activeOrderToppings()
+
     this.cta.onClick = () => openStore()
   }
 

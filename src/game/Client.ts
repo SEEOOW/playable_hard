@@ -125,6 +125,19 @@ export class Client extends Container {
     return this.orderItems.length > 0 && this.orderItems.every((i) => i.delivered)
   }
 
+  // Topping sets of every undelivered pita slot — feeds Smart Cooking so the
+  // kitchen can allow only those ingredients that keep an open pita on the
+  // path to some active order.
+  openPitaToppings(): ReadonlyArray<ReadonlyArray<PitaTopping>> {
+    const out: PitaTopping[][] = []
+    for (const it of this.orderItems) {
+      if (it.delivered) continue
+      if (it.kind !== 'pita') continue
+      out.push(it.toppings)
+    }
+    return out
+  }
+
   // Total coin reward for this client's order — sum of all item prices.
   totalPrice(): number {
     let sum = 0

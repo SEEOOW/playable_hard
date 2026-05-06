@@ -97,6 +97,17 @@ export class ClientQueue extends Container {
     return null
   }
 
+  // Topping sets of every undelivered pita slot in waiting clients. Used by
+  // Kitchen's Smart Cooking gate to validate ingredient additions.
+  activeOrderToppings(): ReadonlyArray<ReadonlyArray<PitaTopping>> {
+    const out: ReadonlyArray<PitaTopping>[] = []
+    for (const c of this.clients) {
+      if (c.state !== 'waiting') continue
+      for (const t of c.openPitaToppings()) out.push(t)
+    }
+    return out
+  }
+
   activeRecipes(): RecipeId[] {
     const set = new Set<RecipeId>()
     for (const c of this.clients) {

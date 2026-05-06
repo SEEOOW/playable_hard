@@ -6,7 +6,7 @@ import { applySpec, type LayoutMap, type LayerSpec } from '../layout'
 import { config } from '../config'
 import type { Ingredient, RecipeId } from '../recipes'
 import { PitaAssembly } from '../pita/PitaAssembly'
-import { PITA_ORIGIN_DX, PITA_ORIGIN_DY, type PitaIngredient } from '../pita/recipes'
+import { PITA_ORIGIN_DX, PITA_ORIGIN_DY, type PitaIngredient, type PitaTopping } from '../pita/recipes'
 
 type CookState = 'idle' | 'slicing' | 'flying' | 'done'
 
@@ -19,6 +19,11 @@ export class Kitchen extends Container {
   // Tap on a drink: outer code returns true if the drink was accepted by a
   // waiting client, triggering the reappear cooldown. No-op on no match.
   onDrinkTap: ((idx: number) => boolean) | null = null
+  // Smart Cooking feed: outer scene supplies the topping sets of every
+  // undelivered pita slot in waiting clients. Used to gate basket placements
+  // and ingredient additions so the player can only build pitas that match
+  // some active order's path (subset relation).
+  activeOrderToppings: (() => ReadonlyArray<ReadonlyArray<PitaTopping>>) | null = null
 
   // PSD-mirrored decor + interactives
   private basket: Sprite
@@ -116,7 +121,10 @@ export class Kitchen extends Container {
   }
 
   // Lays an empty open pita on the first plate that doesn't have one yet.
+  // Smart Cooking: blocked when adding the new empty pita would leave any
+  // existing assembly without a unique active order to claim.
   private placePita(): void {
+    if (!this.smartCookingCanPlace()) return
     for (const pita of this.pitas) {
       if (!pita.hasPita()) {
         pita.spawnEmpty()
@@ -125,21 +133,70 @@ export class Kitchen extends Container {
     }
   }
 
-  // Adds an ingredient to the first plate whose pita exists, isn't full and
-  // doesn't already contain this ingredient. Continues if the candidate
-  // refused (e.g. duplicate) so a 2nd tap of meat lands on plate 2, etc.
-  // Meat additionally consumes one portion from the bowl (LIFO: the most
-  // recently sliced piece is taken first).
+  // Adds an ingredient to the first plate whose pita exists, isn't full,
+  // doesn't already contain this ingredient, and after the addition still
+  // admits a 1-to-1 assignment of every assembly to a distinct active pita
+  // order (Smart Cooking — counts quantities, not just types). Meat
+  // additionally consumes one portion from the bowl (LIFO).
   private addIngredient(ing: PitaIngredient): void {
     if (ing === 'meat' && !this.hasAvailableMeat()) return
     for (const pita of this.pitas) {
       if (!pita.hasPita()) continue
       if (pita.isFull()) continue
+      if (!this.smartCookingAllows(pita, ing)) continue
       if (pita.addIngredient(ing)) {
         if (ing === 'meat') this.consumeOneMeat()
         return
       }
     }
+  }
+
+  // Checks if every existing assembly + a hypothetical new empty pita can be
+  // matched to distinct active orders. Empty pitas match anything, so the
+  // gate effectively asks "is there an unused order slot left?".
+  private smartCookingCanPlace(): boolean {
+    if (!this.activeOrderToppings) return true
+    const supply = this.currentPitaToppings()
+    supply.push([])
+    return this.canCoverDemand(supply)
+  }
+
+  // Hypothetically applies `next` to `target` and checks whether all
+  // assemblies (including the modified one) can still be matched 1-to-1 to
+  // distinct active orders. Meat is implicit in every closed-pita order, so
+  // a meat addition doesn't change the topping signature.
+  private smartCookingAllows(target: PitaAssembly, next: PitaIngredient): boolean {
+    if (!this.activeOrderToppings) return true
+    const supply: PitaTopping[][] = []
+    for (const p of this.pitas) {
+      if (!p.hasPita()) continue
+      if (p === target) {
+        const after = new Set<PitaTopping>(p.toppings())
+        if (next !== 'meat') after.add(next)
+        supply.push([...after])
+      } else {
+        supply.push(p.toppings())
+      }
+    }
+    return this.canCoverDemand(supply)
+  }
+
+  private currentPitaToppings(): PitaTopping[][] {
+    const out: PitaTopping[][] = []
+    for (const p of this.pitas) {
+      if (p.hasPita()) out.push(p.toppings())
+    }
+    return out
+  }
+
+  // True iff there's a perfect matching from `supply` to `activeOrderToppings`
+  // where supply[i] can claim demand[j] iff supply[i].toppings ⊆ demand[j].
+  private canCoverDemand(supply: ReadonlyArray<ReadonlyArray<PitaTopping>>): boolean {
+    if (!this.activeOrderToppings) return true
+    const demand = this.activeOrderToppings()
+    if (supply.length === 0) return true
+    if (demand.length < supply.length) return false
+    return maxMatch(supply, demand) === supply.length
   }
 
   private hasAvailableMeat(): boolean {
@@ -321,6 +378,38 @@ function applyMany(sprites: Sprite[], specs: LayerSpec[]): void {
 
 function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
+}
+
+function toppingsSubset(sub: ReadonlyArray<PitaTopping>, sup: ReadonlyArray<PitaTopping>): boolean {
+  if (sub.length > sup.length) return false
+  for (const v of sub) if (!sup.includes(v)) return false
+  return true
+}
+
+// Bipartite max matching (Kuhn's algorithm). supply[i] can claim demand[j]
+// iff supply[i].toppings ⊆ demand[j]. Inputs are tiny (≤3 supply, ≤9 demand).
+function maxMatch(
+  supply: ReadonlyArray<ReadonlyArray<PitaTopping>>,
+  demand: ReadonlyArray<ReadonlyArray<PitaTopping>>,
+): number {
+  const matchD: number[] = new Array(demand.length).fill(-1)
+  const tryAssign = (i: number, visited: boolean[]): boolean => {
+    for (let j = 0; j < demand.length; j++) {
+      if (visited[j]) continue
+      if (!toppingsSubset(supply[i], demand[j])) continue
+      visited[j] = true
+      if (matchD[j] === -1 || tryAssign(matchD[j], visited)) {
+        matchD[j] = i
+        return true
+      }
+    }
+    return false
+  }
+  let count = 0
+  for (let i = 0; i < supply.length; i++) {
+    if (tryAssign(i, new Array(demand.length).fill(false))) count++
+  }
+  return count
 }
 
 // Wires a single sprite as a tap source for an ingredient action.
