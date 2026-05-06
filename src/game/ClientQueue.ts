@@ -1,5 +1,5 @@
 import { Container, Point } from 'pixi.js'
-import { Client } from './Client'
+import { Client, type ItemDeliveredInfo } from './Client'
 import { Order } from './Order'
 import type { RecipeId } from '../recipes'
 import { layout, DESIGN_W } from '../layout'
@@ -15,6 +15,10 @@ export class ClientQueue extends Container {
   onClientReady: ((c: Client) => void) | null = null
   onClientLeft:  ((c: Client, satisfied: boolean) => void) | null = null
   onAllDone:     (() => void) | null = null
+  // Per-position delivery feedback — fires once per delivered slot when the
+  // in-bubble reward animation completes; scene flies a coin from this point
+  // to the HUD counter.
+  onItemDelivered: ((info: ItemDeliveredInfo) => void) | null = null
 
   // External top-most container (sibling in worldRoot) that parents the
   // bubbles so they render above table/kitchen.
@@ -40,13 +44,12 @@ export class ClientQueue extends Container {
 
   // Tap-on-pita delivery. Returns true if some waiting client's open pita slot
   // matches the assembly's toppings (set equality + meat present); marks that
-  // slot delivered, and dismisses the client when their order is fully done.
+  // slot delivered. The dismissal happens later via Client.onOrderComplete,
+  // after the per-position reward animations finish.
   tryDeliverPita(toppings: ReadonlyArray<PitaTopping>, hasMeat: boolean): boolean {
     for (const c of this.clients) {
       if (c.state !== 'waiting') continue
-      if (!c.tryDeliverPita(toppings, hasMeat)) continue
-      if (c.isFullyDelivered()) this.dismissClient(c, true)
-      return true
+      if (c.tryDeliverPita(toppings, hasMeat)) return true
     }
     return false
   }
@@ -56,9 +59,7 @@ export class ClientQueue extends Container {
   tryDeliverDrink(): boolean {
     for (const c of this.clients) {
       if (c.state !== 'waiting') continue
-      if (!c.tryDeliverDrink()) continue
-      if (c.isFullyDelivered()) this.dismissClient(c, true)
-      return true
+      if (c.tryDeliverDrink()) return true
     }
     return false
   }
@@ -147,6 +148,11 @@ export class ClientQueue extends Container {
     client.slotIdx = slotIdx
     client.scale.set(layout.clientScale)
     client.position.set(-200, slot.y)
+    // Per-position reward feedback fires from the client; queue forwards it
+    // to the scene's flying-coin FX. Order completion (after the LAST reward
+    // animation) triggers the satisfied walk-out.
+    client.onItemDelivered = (info) => this.onItemDelivered?.(info)
+    client.onOrderComplete = () => this.dismissClient(client, true)
     // Add to the BOTTOM of the queue's child stack so the walking-in client
     // is drawn behind already-standing ones and doesn't overlap them mid-walk.
     this.addChildAt(client, 0)

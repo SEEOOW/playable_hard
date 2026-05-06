@@ -1,4 +1,4 @@
-import { Container, Sprite } from 'pixi.js'
+import { Container, Point, Sprite } from 'pixi.js'
 import { layout, applySpec, applyUiAnchor, cover } from '../layout'
 import { tex } from '../assets'
 import { ClientQueue } from '../game/ClientQueue'
@@ -9,6 +9,18 @@ import { CoinsHud } from '../ui/CoinsHud'
 import { CTA } from '../ui/CTA'
 import { config } from '../config'
 import { openStore } from '../redirect'
+
+// Flying-coin pacing/sizing for the per-position reward FX.
+const FLY_DURATION = 0.55
+const FLY_COIN_SIZE = 64  // stage-space px (multiplied by cover scale at spawn)
+
+type FlyingCoin = {
+  sprite: Sprite
+  start: Point
+  end: Point
+  t: number
+  reward: number
+}
 
 export class GameScene extends Container {
   // World content lives in design space (1280×720) and is cover-scaled
@@ -27,6 +39,11 @@ export class GameScene extends Container {
   // Top-most layer in the world — order bubbles live here so they render
   // above table, kitchen, and the clients themselves.
   private bubblesLayer: Container
+
+  // Above world AND ui — hosts coins flying from delivered bubble slots to
+  // the HUD counter. Lives in stage coords (no transform).
+  private fxLayer: Container
+  private flyingCoins: FlyingCoin[] = []
 
   // UI children
   private soundButton: Sprite
@@ -67,8 +84,11 @@ export class GameScene extends Container {
 
     this.uiRoot.addChild(this.soundButton, this.coins, this.hint, this.cta)
 
-    // Stage order: world below, UI above.
-    this.addChild(this.worldRoot, this.uiRoot)
+    this.fxLayer = new Container()
+    this.fxLayer.eventMode = 'none'
+
+    // Stage order: world below, UI above, FX overlay on top.
+    this.addChild(this.worldRoot, this.uiRoot, this.fxLayer)
 
     this.applyWorldLayout()
   }
@@ -97,6 +117,7 @@ export class GameScene extends Container {
     this.clientQueue.update(dt)
     this.kitchen.update(dt)
     this.hint.update(dt)
+    this.tickFlyingCoins(dt)
   }
 
   notifyInteraction(): void {
@@ -129,12 +150,15 @@ export class GameScene extends Container {
       this.refreshHint()
     }
 
-    this.clientQueue.onClientLeft = (client, satisfied) => {
-      if (satisfied) {
-        this.coins.add(client.totalPrice(), client.position.clone())
-      }
+    this.clientQueue.onClientLeft = (_client, _satisfied) => {
+      // Coins are now added per-delivered-position via the flying-coin FX
+      // (see onItemDelivered below); no bulk add on walk-out.
       this.kitchen.setActiveRecipes(this.clientQueue.activeRecipes())
       this.refreshHint()
+    }
+
+    this.clientQueue.onItemDelivered = ({ reward, worldPos }) => {
+      this.spawnFlyingCoin(worldPos, reward)
     }
 
     this.clientQueue.onAllDone = () => this.finish()
@@ -186,5 +210,40 @@ export class GameScene extends Container {
 
   private finish(): void {
     this.cta.show()
+  }
+
+  // Spawns a coin sprite in fxLayer (stage space) at the bubble slot's world
+  // position; tickFlyingCoins eases it toward the HUD coin icon and triggers
+  // the counter increment on arrival.
+  private spawnFlyingCoin(start: Point, reward: number): void {
+    const coin = new Sprite(tex('coin'))
+    coin.anchor.set(0.5, 0.5)
+    const size = FLY_COIN_SIZE * this.coverScale
+    coin.width = size
+    coin.height = size
+    coin.position.set(start.x, start.y)
+    this.fxLayer.addChild(coin)
+    const end = this.coins.iconGlobalPos()
+    this.flyingCoins.push({ sprite: coin, start: new Point(start.x, start.y), end, t: 0, reward })
+  }
+
+  private tickFlyingCoins(dt: number): void {
+    for (let i = this.flyingCoins.length - 1; i >= 0; i--) {
+      const fc = this.flyingCoins[i]
+      fc.t += dt
+      const p = Math.min(fc.t / FLY_DURATION, 1)
+      // Ease-in: coin lingers a beat near the bubble then accelerates to HUD.
+      const eased = p * p
+      fc.sprite.position.set(
+        fc.start.x + (fc.end.x - fc.start.x) * eased,
+        fc.start.y + (fc.end.y - fc.start.y) * eased,
+      )
+      if (p >= 1) {
+        this.fxLayer.removeChild(fc.sprite)
+        fc.sprite.destroy()
+        this.flyingCoins.splice(i, 1)
+        this.coins.add(fc.reward, fc.end)
+      }
+    }
   }
 }
