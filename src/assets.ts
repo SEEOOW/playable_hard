@@ -16,7 +16,7 @@ export type AssetName =
   | 'pita_fries_a' | 'pita_fries_b'
   | 'pita_tomato'
   // UI
-  | 'coin' | 'sound_on' | 'bubble' | 'hand' | 'button_install' | 'check_mark'
+  | 'coin' | 'sound_on' | 'bubble' | 'hand' | 'button_install' | 'check_mark' | 'new_avatar'
 
 const url = (path: string): string => import.meta.env.BASE_URL + path
 
@@ -53,6 +53,7 @@ const MANIFEST: Record<AssetName, string> = {
   hand:           url('images/ui/hand.png'),
   button_install: url('images/ui/button_install.png'),
   check_mark:     url('images/ui/check_mark.png'),
+  new_avatar:     url('images/ui/new_avatar.png'),
 }
 
 // Spine skeletons. Files live in `assets_shawarma/spine_v42/` — copies of the
@@ -89,7 +90,18 @@ export async function loadAssets(): Promise<void> {
     spineEntries.push({ alias: `${name}_atlas`, src: m.atlas })
   }
 
-  await Assets.load([...texEntries, ...spineEntries])
+  // Load each asset independently and swallow individual failures — a single
+  // missing UI icon (e.g. a placeholder slot waiting for a real file) must
+  // not black-screen the whole playable. Missing aliases fall back to
+  // Texture.WHITE via tex().
+  const all = [...texEntries, ...spineEntries]
+  await Promise.all(
+    all.map((entry) =>
+      Assets.load(entry).catch((err) => {
+        console.warn(`[assets] failed to load "${entry.alias}" (${entry.src}):`, err?.message ?? err)
+      }),
+    ),
+  )
 }
 
 export function tex(name: AssetName): Texture {

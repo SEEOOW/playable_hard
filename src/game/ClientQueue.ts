@@ -20,6 +20,12 @@ export class ClientQueue extends Container {
   // to the HUD counter.
   onItemDelivered: ((info: ItemDeliveredInfo) => void) | null = null
 
+  // Hard cap on the TOTAL number of clients spawned over the level — counts
+  // every walk-in (on-screen, leaving, already-departed). Once reached, no
+  // further spawns happen, regardless of the dismissal cause. null = no cap.
+  clientsLimit: number | null = null
+  private spawnedCount = 0
+
   // External top-most container (sibling in worldRoot) that parents the
   // bubbles so they render above table/kitchen.
   bubblesLayer: Container | null = null
@@ -66,7 +72,9 @@ export class ClientQueue extends Container {
 
   // Walk-out for a specific client, replenishing the slot in parallel so the
   // counter doesn't sit empty for the full walk-out duration. `satisfied`
-  // distinguishes a paid order from a manual dev dismissal.
+  // distinguishes a paid order from a manual dev dismissal. The spawn budget
+  // is enforced inside spawnAt itself, so fillSlot calls here become no-ops
+  // once the cap is reached and no new clients arrive.
   private dismissClient(client: Client, satisfied: boolean): void {
     const slotIdx = client.slotIdx
     const target = new Point(DESIGN_W + 200, client.position.y)
@@ -87,6 +95,10 @@ export class ClientQueue extends Container {
         }
       }
     })
+  }
+
+  private canSpawn(): boolean {
+    return this.clientsLimit === null || this.spawnedCount < this.clientsLimit
   }
 
   findMatching(recipe: RecipeId): Client | null {
@@ -140,8 +152,12 @@ export class ClientQueue extends Container {
   }
 
   private spawnAt(slotIdx: number, name: SpineName): void {
+    // Single chokepoint for the level-wide spawn budget — start() and every
+    // fillSlot() funnel through here, so one check covers all spawn paths.
+    if (!this.canSpawn()) return
     const slot = this.slots[slotIdx]
     if (!slot) return
+    this.spawnedCount += 1
     const order = new Order(['shawarma']) // legacy dummy — delivery logic TBD
     const client = new Client(order, name)
     client.setOrder(generateOrder())
@@ -149,8 +165,8 @@ export class ClientQueue extends Container {
     client.scale.set(layout.clientScale)
     client.position.set(-200, slot.y)
     // Per-position reward feedback fires from the client; queue forwards it
-    // to the scene's flying-coin FX. Order completion (after the LAST reward
-    // animation) triggers the satisfied walk-out.
+    // to the scene's flying-coin FX. Order completion triggers the walk-out;
+    // the satisfied count is tracked by the scene's HUD for the redirect.
     client.onItemDelivered = (info) => this.onItemDelivered?.(info)
     client.onOrderComplete = () => this.dismissClient(client, true)
     // Add to the BOTTOM of the queue's child stack so the walking-in client

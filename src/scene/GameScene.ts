@@ -6,6 +6,7 @@ import { Kitchen } from '../game/Kitchen'
 import { Plate } from '../game/Plate'
 import { Hint } from '../ui/Hint'
 import { CoinsHud } from '../ui/CoinsHud'
+import { VisitorsHud } from '../ui/VisitorsHud'
 import { CTA } from '../ui/CTA'
 import { config } from '../config'
 import { openStore } from '../redirect'
@@ -13,6 +14,10 @@ import { openStore } from '../redirect'
 // Flying-coin pacing/sizing for the per-position reward FX.
 const FLY_DURATION = 0.55
 const FLY_COIN_SIZE = 64  // stage-space px (multiplied by cover scale at spawn)
+
+// Total guests required to "win" the playable — 5th satisfied guest triggers
+// the App Store redirect.
+const VISITORS_GOAL = 5
 
 type FlyingCoin = {
   sprite: Sprite
@@ -48,6 +53,7 @@ export class GameScene extends Container {
   // UI children
   private soundButton: Sprite
   private coins: CoinsHud
+  private visitors: VisitorsHud
   private hint: Hint
   private cta: CTA
 
@@ -66,6 +72,10 @@ export class GameScene extends Container {
     this.table = new Sprite(tex('table'))
 
     this.clientQueue = new ClientQueue()
+    // Stop spawning replacements once VISITORS_GOAL satisfied departures
+    // happen — this terminates the level cleanly so the Store redirect fires
+    // on the final guest with no further visitors arriving behind them.
+    this.clientQueue.clientsLimit = VISITORS_GOAL
     this.kitchen = new Kitchen()
     this.bubblesLayer = new Container()
     this.clientQueue.bubblesLayer = this.bubblesLayer
@@ -79,10 +89,11 @@ export class GameScene extends Container {
 
     this.soundButton = new Sprite(tex('sound_on'))
     this.coins = new CoinsHud()
+    this.visitors = new VisitorsHud(VISITORS_GOAL)
     this.hint = new Hint()
     this.cta = new CTA()
 
-    this.uiRoot.addChild(this.soundButton, this.coins, this.hint, this.cta)
+    this.uiRoot.addChild(this.soundButton, this.coins, this.visitors, this.hint, this.cta)
 
     this.fxLayer = new Container()
     this.fxLayer.eventMode = 'none'
@@ -141,6 +152,7 @@ export class GameScene extends Container {
   private applyUiLayout(): void {
     applyUiAnchor(this.soundButton, layout.ui.soundButton, this.viewW, this.viewH, this.coverScale)
     this.coins.layout(layout.ui.coinHud, this.viewW, this.viewH, this.coverScale)
+    this.visitors.layout(layout.ui.visitorsHud, this.viewW, this.viewH, this.coverScale)
     this.cta.layout(this.viewW, this.viewH)
   }
 
@@ -150,9 +162,13 @@ export class GameScene extends Container {
       this.refreshHint()
     }
 
-    this.clientQueue.onClientLeft = (_client, _satisfied) => {
+    this.clientQueue.onClientLeft = (_client, satisfied) => {
       // Coins are now added per-delivered-position via the flying-coin FX
       // (see onItemDelivered below); no bulk add on walk-out.
+      if (satisfied && this.visitors.bumpServed()) {
+        // 5th fully-served guest → fire the App Store redirect.
+        openStore()
+      }
       this.kitchen.setActiveRecipes(this.clientQueue.activeRecipes())
       this.refreshHint()
     }
