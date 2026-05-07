@@ -174,6 +174,10 @@ export class Kitchen extends Container {
     for (const pita of this.pitas) {
       if (!pita.hasPita()) continue
       if (pita.isFull()) continue
+      // Meat-first rule: toppings can only land on pitas that already have
+      // meat. Pitas without meat are skipped — if no other pita can accept
+      // this topping, the loop exits without changing any state.
+      if (ing !== 'meat' && !pita.hasMeat()) continue
       if (!this.smartCookingAllows(pita, ing)) continue
       if (pita.addIngredient(ing)) {
         if (ing === 'meat') this.consumeOneMeat()

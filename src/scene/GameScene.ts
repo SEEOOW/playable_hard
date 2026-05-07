@@ -11,9 +11,10 @@ import { CTA } from '../ui/CTA'
 import { config } from '../config'
 import { openStore } from '../redirect'
 
-// Flying-coin pacing/sizing for the per-position reward FX.
+// Flying-coin pacing for the per-position reward FX. Display size mirrors
+// the HUD coin icon (layout.ui.coinHud) so spawn (from the bubble), the
+// entire flight, and the landing are all at identical pixel dimensions.
 const FLY_DURATION = 0.55
-const FLY_COIN_SIZE = 64  // stage-space px (multiplied by cover scale at spawn)
 
 // Total guests required to "win" the playable — 5th satisfied guest triggers
 // the App Store redirect.
@@ -235,9 +236,12 @@ export class GameScene extends Container {
   private spawnFlyingCoin(start: Point, reward: number): void {
     const coin = new Sprite(tex('coin'))
     coin.anchor.set(0.5, 0.5)
-    const size = FLY_COIN_SIZE * this.coverScale
-    coin.width = size
-    coin.height = size
+    // Lock pixel size to the HUD coin icon for the entire flight — set once
+    // at spawn, never touched in tickFlyingCoins, so the sprite never scales
+    // along the trajectory.
+    const hud = layout.ui.coinHud
+    coin.width  = hud.w * this.coverScale
+    coin.height = hud.h * this.coverScale
     coin.position.set(start.x, start.y)
     this.fxLayer.addChild(coin)
     const end = this.coins.iconGlobalPos()

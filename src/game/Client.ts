@@ -19,7 +19,6 @@ const BUBBLE_ITEM_SPACING = 70
 const BUBBLE_ITEM_X = 5  // horizontal nudge inside the bubble (right of center)
 const BUBBLE_DRINK_SCALE = 0.4  // drink size relative to a pita slot
 const BUBBLE_CHECK_SIZE = 45  // checkmark fits comfortably inside a slot
-const BUBBLE_REWARD_COIN_SIZE = 50  // coin shown next to "+X" during reward phase
 const BUBBLE_REWARD_FONT = 36
 const BUBBLE_REWARD_COIN_X = -22
 const BUBBLE_REWARD_TEXT_X = 4
@@ -221,8 +220,14 @@ export class Client extends Container {
     const group = new Container()
     const coin = new Sprite(tex('coin'))
     coin.anchor.set(0.5, 0.5)
-    const fit = BUBBLE_REWARD_COIN_SIZE / Math.max(coin.texture.width, coin.texture.height)
-    coin.scale.set(fit)
+    // Match the HUD coin icon's on-screen size. The bubble has its own scale
+    // applied (layout.bubble.scale), so we divide the HUD size by it; cover
+    // scale is shared between the bubble's worldRoot and the HUD's uiRoot,
+    // so the two coins land at identical pixel dimensions on every viewport.
+    const hud = layout.ui.coinHud
+    const bs = layout.bubble.scale
+    coin.width  = hud.w / bs.x
+    coin.height = hud.h / bs.y
     coin.position.set(BUBBLE_REWARD_COIN_X, 0)
 
     const text = new Text({
