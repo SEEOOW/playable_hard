@@ -17,6 +17,7 @@ export type AssetName =
   | 'pita_tomato'
   // UI
   | 'coin' | 'sound_on' | 'bubble' | 'hand' | 'button_install' | 'check_mark' | 'new_avatar'
+  | 'timer' | 'timer_progress'
 
 const url = (path: string): string => import.meta.env.BASE_URL + path
 
@@ -54,6 +55,8 @@ const MANIFEST: Record<AssetName, string> = {
   button_install: url('images/ui/button_install.png'),
   check_mark:     url('images/ui/check_mark.png'),
   new_avatar:     url('images/ui/new_avatar.png'),
+  timer:          url('images/ui/timer.png'),
+  timer_progress: url('images/ui/timer_progress.png'),
 }
 
 // Spine skeletons. Files live in `assets_shawarma/spine_v42/` — copies of the

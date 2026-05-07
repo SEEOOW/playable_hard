@@ -1,4 +1,4 @@
-import { Container, Point, Sprite } from 'pixi.js'
+import { Container, Graphics, Point, Sprite } from 'pixi.js'
 import { MeatSpit } from './MeatSpit'
 import { Plate } from './Plate'
 import { tex, type AssetName } from '../assets'
@@ -56,6 +56,12 @@ export class Kitchen extends Container {
 
   // Per-drink cooldown timer; >0 means hidden, ticks down to 0 → reappear.
   private drinkCooldown: number[] = [0, 0, 0]
+  // Visual cooldown clock that replaces the drink while it's away. The
+  // timer_progress sprite is revealed by a wedge-shaped Graphics mask that
+  // grows from 0° to 360° over the cooldown — so the indicator visibly
+  // sweeps around the timer.png face like a filling clock.
+  private drinkTimers: Container[] = []
+  private drinkTimerMasks: Graphics[] = []
 
   constructor() {
     super()
@@ -81,6 +87,20 @@ export class Kitchen extends Container {
     this.tomatoSlices   = makeMany('tomato', 6)
     this.pitas          = [new PitaAssembly(), new PitaAssembly(), new PitaAssembly()]
     this.meatStack      = [new Sprite(), new Sprite(), new Sprite()]
+    for (let i = 0; i < 3; i++) {
+      const c = new Container()
+      c.eventMode = 'none'
+      c.visible = false
+      const bg = new Sprite(tex('timer'))
+      bg.anchor.set(0.5, 0.5)
+      const progress = new Sprite(tex('timer_progress'))
+      progress.anchor.set(0.5, 0.5)
+      const mask = new Graphics()
+      progress.mask = mask
+      c.addChild(bg, progress, mask)
+      this.drinkTimers.push(c)
+      this.drinkTimerMasks.push(mask)
+    }
     // Bowl starts empty — meat is revealed slot-by-slot on tap.
     this.meatStack.forEach((s) => { s.visible = false })
 
@@ -120,10 +140,14 @@ export class Kitchen extends Container {
       this.fries,
       ...this.cucumberSlices,
       ...this.plateSprites,
-      ...this.drinks,
       ...this.tomatoSlices,
       ...this.pitas,
       ...this.meatStack,
+      // Drinks (and their timers) render ABOVE the pita assemblies so the
+      // top cup isn't covered by the pita art that bleeds past the rightmost
+      // plate. Drinks stay clickable because they're hit-tested first.
+      ...this.drinks,
+      ...this.drinkTimers,
     )
   }
 
@@ -246,7 +270,8 @@ export class Kitchen extends Container {
     this.tickDrinks(dt)
   }
 
-  // Restores tapped drinks after their cooldown elapses.
+  // Restores tapped drinks after their cooldown elapses; meanwhile drives the
+  // visual clock (rotating hand + seconds-left label) at the drink's slot.
   private tickDrinks(dt: number): void {
     for (let i = 0; i < this.drinkCooldown.length; i++) {
       if (this.drinkCooldown[i] <= 0) continue
@@ -254,7 +279,28 @@ export class Kitchen extends Container {
       if (this.drinkCooldown[i] <= 0) {
         this.drinkCooldown[i] = 0
         this.drinks[i].visible = true
+        this.drinkTimers[i].visible = false
+      } else {
+        this.updateDrinkTimer(i)
       }
+    }
+  }
+
+  private updateDrinkTimer(idx: number): void {
+    const remaining = this.drinkCooldown[idx]
+    const total = config.drink.cooldown
+    const progress = (total - remaining) / total  // 0 → 1 over cooldown
+    // Wedge mask grows clockwise from 12 o'clock. Radius is generous so the
+    // wedge fully covers timer_progress.png (35×34) at any rotation.
+    const radius = 30
+    const angle = progress * Math.PI * 2
+    const m = this.drinkTimerMasks[idx]
+    m.clear()
+    if (angle > 0) {
+      m.moveTo(0, 0)
+      m.arc(0, 0, radius, -Math.PI / 2, -Math.PI / 2 + angle)
+      m.lineTo(0, 0)
+      m.fill({ color: 0xffffff })
     }
   }
 
@@ -263,6 +309,8 @@ export class Kitchen extends Container {
     if (!this.onDrinkTap?.(idx)) return
     this.drinks[idx].visible = false
     this.drinkCooldown[idx] = config.drink.cooldown
+    this.drinkTimers[idx].visible = true
+    this.updateDrinkTimer(idx)
   }
 
   private tryDeliverPita(assembly: PitaAssembly): void {
@@ -284,6 +332,13 @@ export class Kitchen extends Container {
     applyMany(this.plateSprites,   map.plates)
     applyMany(this.drinks,          map.juice)
     applyMany(this.tomatoSlices,    map.tomatoSlices)
+
+    // Each cooldown clock anchors at the centre of its drink's slot so the
+    // timer drops in exactly where the cup was.
+    for (let i = 0; i < this.drinkTimers.length; i++) {
+      const j = map.juice[i]
+      this.drinkTimers[i].position.set(j.x + j.w / 2, j.y + j.h / 2)
+    }
 
     // Each pita assembly sits at its plate's PSD canvas origin (top-left of
     // the 200×200 reference frame in src/pita/*.psd) and uses the canonical
