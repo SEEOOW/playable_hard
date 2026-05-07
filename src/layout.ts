@@ -205,11 +205,10 @@ export const layout: LayoutMap = {
   spitSpine: { x: 432, y: 580, scale: 0.25 },
 
   ui: {
-    // PSD: coin (2, 0) 72x79 → top-left
-    coinHud:     { hAnchor: 'left', vAnchor: 'top',    offsetX: 2, offsetY: 0, w: 72, h: 79 },
-    // Visitor counter — tucked directly under the coin HUD so the two HUD
-    // counters form a vertical stack at the top-left corner.
-    visitorsHud: { hAnchor: 'left', vAnchor: 'top',    offsetX: 2, offsetY: 87, w: 72, h: 72 },
+    // Coin HUD halved from the PSD baseline (72×79) so the corner stack reads
+    // smaller; visitor HUD mirrors the size and sits directly under it.
+    coinHud:     { hAnchor: 'left', vAnchor: 'top',    offsetX: 2, offsetY: 0,  w: 36, h: 40 },
+    visitorsHud: { hAnchor: 'left', vAnchor: 'top',    offsetX: 2, offsetY: 44, w: 36, h: 36 },
     // PSD: sound (2, 655) 61x64 → bottom-left (720 - 655 - 64 = 1)
     soundButton: { hAnchor: 'left', vAnchor: 'bottom', offsetX: 2, offsetY: 1, w: 61, h: 64 },
   },

@@ -5,8 +5,8 @@ import { applyUiAnchor, type UiAnchor } from '../layout'
 // Base font size in design pixels — multiplied by the cover scale on layout
 // so the counter grows with the icon on larger viewports. Stays crisp because
 // the text is re-rasterized whenever fontSize changes (cover-scale changes).
-const LABEL_FONT_SIZE = 36
-const LABEL_GAP = 8  // gap between icon's right edge and the number, in design px
+const LABEL_FONT_SIZE = 18
+const LABEL_GAP = 4  // gap between icon's right edge and the number, in design px
 
 export class CoinsHud extends Container {
   total = 0
@@ -26,7 +26,7 @@ export class CoinsHud extends Container {
         fontSize: LABEL_FONT_SIZE,
         fontWeight: '700',
         fill: 0xffffff,
-        stroke: { color: 0x222222, width: 4 },
+        stroke: { color: 0x222222, width: 2 },
       },
     })
     this.counter.anchor.set(0, 0.5)

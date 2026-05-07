@@ -4,8 +4,8 @@ import { applyUiAnchor, type UiAnchor } from '../layout'
 
 // Mirrors CoinsHud — icon at the anchor, "served/total" counter to its right,
 // re-rasterized on layout so the number stays sharp at any cover scale.
-const LABEL_FONT_SIZE = 36
-const LABEL_GAP = 8
+const LABEL_FONT_SIZE = 18
+const LABEL_GAP = 4
 
 export class VisitorsHud extends Container {
   served = 0
@@ -25,7 +25,7 @@ export class VisitorsHud extends Container {
         fontSize: LABEL_FONT_SIZE,
         fontWeight: '700',
         fill: 0xffffff,
-        stroke: { color: 0x222222, width: 4 },
+        stroke: { color: 0x222222, width: 2 },
       },
     })
     this.counter.anchor.set(0, 0.5)
