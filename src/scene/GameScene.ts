@@ -8,6 +8,7 @@ import { Hint } from '../ui/Hint'
 import { CoinsHud } from '../ui/CoinsHud'
 import { VisitorsHud } from '../ui/VisitorsHud'
 import { CTA } from '../ui/CTA'
+import { InstallButton } from '../ui/InstallButton'
 import { config } from '../config'
 import { openStore } from '../redirect'
 
@@ -57,6 +58,7 @@ export class GameScene extends Container {
   private visitors: VisitorsHud
   private hint: Hint
   private cta: CTA
+  private installButton: InstallButton
 
   private tutorialStep = 0
   private viewW = 0
@@ -93,8 +95,13 @@ export class GameScene extends Container {
     this.visitors = new VisitorsHud(VISITORS_GOAL)
     this.hint = new Hint()
     this.cta = new CTA()
+    this.installButton = new InstallButton()
+    this.installButton.onClick = () => openStore()
 
-    this.uiRoot.addChild(this.soundButton, this.coins, this.visitors, this.hint, this.cta)
+    // Install button last in uiRoot so it draws ABOVE the rest of the UI.
+    this.uiRoot.addChild(
+      this.soundButton, this.coins, this.visitors, this.hint, this.cta, this.installButton,
+    )
 
     this.fxLayer = new Container()
     this.fxLayer.eventMode = 'none'
@@ -129,6 +136,7 @@ export class GameScene extends Container {
     this.clientQueue.update(dt)
     this.kitchen.update(dt)
     this.hint.update(dt)
+    this.installButton.update(dt)
     this.tickFlyingCoins(dt)
   }
 
@@ -154,6 +162,7 @@ export class GameScene extends Container {
     applyUiAnchor(this.soundButton, layout.ui.soundButton, this.viewW, this.viewH, this.coverScale)
     this.coins.layout(layout.ui.coinHud, this.viewW, this.viewH, this.coverScale)
     this.visitors.layout(layout.ui.visitorsHud, this.viewW, this.viewH, this.coverScale)
+    this.installButton.layout(layout.ui.installButton, this.viewW, this.viewH, this.coverScale)
     this.cta.layout(this.viewW, this.viewH)
   }
 

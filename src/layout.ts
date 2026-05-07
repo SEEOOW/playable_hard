@@ -115,9 +115,10 @@ export type LayoutMap = {
   // Screen-anchored UI. Edge offsets/sizes derived from PSD positions
   // assuming a 1280×720 reference frame.
   ui: {
-    coinHud:     UiAnchor
-    visitorsHud: UiAnchor
-    soundButton: UiAnchor
+    coinHud:       UiAnchor
+    visitorsHud:   UiAnchor
+    soundButton:   UiAnchor
+    installButton: UiAnchor
   }
 }
 
@@ -210,7 +211,10 @@ export const layout: LayoutMap = {
     coinHud:     { hAnchor: 'left', vAnchor: 'top',    offsetX: 2, offsetY: 0,  w: 36, h: 40 },
     visitorsHud: { hAnchor: 'left', vAnchor: 'top',    offsetX: 2, offsetY: 44, w: 36, h: 36 },
     // PSD: sound (2, 655) 61x64 → bottom-left (720 - 655 - 64 = 1)
-    soundButton: { hAnchor: 'left', vAnchor: 'bottom', offsetX: 2, offsetY: 1, w: 61, h: 64 },
+    soundButton:   { hAnchor: 'left',   vAnchor: 'bottom', offsetX: 2, offsetY: 1,  w: 61,  h: 64 },
+    // Install CTA — bottom-centre, persistent. Source PNG is 317×137; sized
+    // down to 140×60 so it reads as a CTA without crowding the kitchen.
+    installButton: { hAnchor: 'center', vAnchor: 'bottom', offsetX: 0, offsetY: 0, w: 140, h: 60 },
   },
 }
 
