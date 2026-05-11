@@ -1,35 +1,22 @@
-import { Container, Point, Sprite } from 'pixi.js'
+import { Container, Sprite } from 'pixi.js'
 import { layout, applySpec, applyUiAnchor, cover } from '../layout'
 import { tex } from '../assets'
 import { ClientQueue } from '../game/ClientQueue'
-import { Client } from '../game/Client'
 import type { SpineName } from '../assets'
 import type { Sfx } from '../AudioManager'
 import { Kitchen } from '../game/Kitchen'
 import { Hint } from '../ui/Hint'
 import { AudioManager } from '../AudioManager'
-import type { PitaTopping } from '../pita/recipes'
 import { CoinsHud } from '../ui/CoinsHud'
 import { VisitorsHud } from '../ui/VisitorsHud'
 import { InstallButton } from '../ui/InstallButton'
 import { openStore } from '../redirect'
-
-// Flying-coin pacing for the per-position reward FX. Display size mirrors
-// the HUD coin icon (layout.ui.coinHud) so spawn (from the bubble), the
-// entire flight, and the landing are all at identical pixel dimensions.
-const FLY_DURATION = 0.55
+import { planHintTarget } from '../game/HintPlanner'
+import { FlyingCoinFx } from '../game/FlyingCoinFx'
 
 // Total guests required to "win" the playable — 5th satisfied guest triggers
 // the App Store redirect.
 const VISITORS_GOAL = 5
-
-type FlyingCoin = {
-  sprite: Sprite
-  start: Point
-  end: Point
-  t: number
-  reward: number
-}
 
 export class GameScene extends Container {
   // World content lives in design space (1280×720) and is cover-scaled
@@ -52,7 +39,7 @@ export class GameScene extends Container {
   // Above world AND ui — hosts coins flying from delivered bubble slots to
   // the HUD counter. Lives in stage coords (no transform).
   private fxLayer: Container
-  private flyingCoins: FlyingCoin[] = []
+  private flyingCoinFx: FlyingCoinFx
 
   // UI children
   private soundButton: Sprite
@@ -113,6 +100,7 @@ export class GameScene extends Container {
 
     this.fxLayer = new Container()
     this.fxLayer.eventMode = 'none'
+    this.flyingCoinFx = new FlyingCoinFx(this.fxLayer, this.coins, this.audio)
 
     // Stage order: world below, UI above, FX overlay on top.
     this.addChild(this.worldRoot, this.uiRoot, this.fxLayer)
@@ -136,6 +124,7 @@ export class GameScene extends Container {
     this.coverScale = cov.scale
     this.worldRoot.scale.set(cov.scale)
     this.worldRoot.position.set(cov.offsetX, cov.offsetY)
+    this.flyingCoinFx.setCoverScale(cov.scale)
 
     this.applyUiLayout()
   }
@@ -149,7 +138,7 @@ export class GameScene extends Container {
     this.refreshHint()
     this.hint.update(dt)
     this.installButton.update(dt)
-    this.tickFlyingCoins(dt)
+    this.flyingCoinFx.update(dt)
   }
 
   notifyInteraction(): void {
@@ -192,7 +181,7 @@ export class GameScene extends Container {
     this.clientQueue.onItemDelivered = ({ reward, worldPos }) => {
       // Audio is fired from onDeliveryAccepted (sync at tap moment); this
       // callback runs 1.5 s later, only to launch the flying-coin FX.
-      this.spawnFlyingCoin(worldPos, reward)
+      this.flyingCoinFx.spawn(worldPos, reward)
     }
     this.clientQueue.onDeliveryAccepted = ({ isLast, spineName }) => {
       // 'ok' on every delivered position; gendered happy cheer adds on top
@@ -229,86 +218,8 @@ export class GameScene extends Container {
     this.kitchen.onSpitTap         = () => this.audio.play('tap')
   }
 
-  // Picks the highest-priority waiting client and returns the next valid
-  // tappable target for delivering their order. Returns null when there's
-  // no actionable next step (e.g. all drinks on cooldown, no plates free,
-  // no waiting clients). Per-frame safe: idempotent through Hint.pointAt.
-  private resolveHintTarget(): Container | null {
-    const waiting = this.clientQueue.waitingClients()
-    if (waiting.length === 0) return null
-    // Priority: most-progressed order first (closest to completion). Tiebreak
-    // by lowest patience so the most urgent client gets coached. Falls
-    // through to the next client if their order has no actionable step
-    // (e.g. only drink left and every drink is on cooldown).
-    const sorted = [...waiting].sort((a, b) => {
-      const ad = a.deliveredCount(); const bd = b.deliveredCount()
-      if (ad !== bd) return bd - ad
-      return a.patienceLeft - b.patienceLeft
-    })
-    for (const client of sorted) {
-      const target = this.planFor(client)
-      if (target) return target
-    }
-    return null
-  }
-
-  private planFor(client: Client): Container | null {
-    for (const item of client.pendingItems()) {
-      const t = this.planForItem(item)
-      if (t) return t
-    }
-    return null
-  }
-
-  private planForItem(
-    item: { kind: 'drink' } | { kind: 'pita'; toppings: ReadonlyArray<PitaTopping> },
-  ): Container | null {
-    if (item.kind === 'drink') return this.kitchen.drinkTarget()
-
-    const target = item.toppings
-    const pitas = this.kitchen.pitaAssemblies()
-
-    // 1. Already-ready assembly that exactly matches → tap to deliver.
-    for (const p of pitas) {
-      if (!p.hasPita() || !p.hasMeat()) continue
-      if (sameToppings(p.toppings(), target)) return p
-    }
-
-    // 2. On-path assembly — toppings ⊆ target, prefer the most-progressed
-    //    so we keep finishing what's already started rather than restarting.
-    let best: ReturnType<Kitchen['pitaAssemblies']>[number] | null = null
-    let bestScore = -1
-    for (const p of pitas) {
-      if (!p.hasPita()) continue
-      const t = p.toppings()
-      if (!isSubset(t, target)) continue
-      const score = t.length * 2 + (p.hasMeat() ? 1 : 0)
-      if (score > bestScore) { best = p; bestScore = score }
-    }
-    if (best) {
-      // Meat-first rule: toppings can't be added until meat is on the pita.
-      if (!best.hasMeat()) {
-        return this.kitchen.hasMeatInBowl() ? this.kitchen.meatTarget() : this.kitchen.spitTarget()
-      }
-      // Find the first missing topping the kitchen actually has a station for.
-      const have = new Set(best.toppings())
-      for (const t of target) {
-        if (have.has(t)) continue
-        const ts = this.kitchen.ingredientTarget(t)
-        if (ts) return ts
-      }
-      // Fully-built and matching — should have been caught in (1); defensive.
-      return best
-    }
-
-    // 3. No assembly is on-path — start fresh. Smart Cooking will allow the
-    //    placement because there's at least one demand slot for this target.
-    if (this.kitchen.hasUnplacedPlate()) return this.kitchen.basketTarget()
-    return null
-  }
-
   private refreshHint(): void {
-    this.hint.pointAt(this.resolveHintTarget())
+    this.hint.pointAt(planHintTarget(this.clientQueue, this.kitchen))
   }
 
   // Sound on/off toggle wired to the bottom-left button. Mutes/unmutes the
@@ -320,59 +231,6 @@ export class GameScene extends Container {
     this.soundButton.tint = this.soundOn ? 0xffffff : 0x666666
     if (this.soundOn) this.audio.play('tap')
   }
-
-  // Spawns a coin sprite in fxLayer (stage space) at the bubble slot's world
-  // position; tickFlyingCoins eases it toward the HUD coin icon and triggers
-  // the counter increment on arrival.
-  private spawnFlyingCoin(start: Point, reward: number): void {
-    this.audio.play('coins_fly_old')
-    const coin = new Sprite(tex('coin'))
-    coin.anchor.set(0.5, 0.5)
-    // Lock pixel size to the HUD coin icon for the entire flight — set once
-    // at spawn, never touched in tickFlyingCoins, so the sprite never scales
-    // along the trajectory.
-    const hud = layout.ui.coinHud
-    coin.width  = hud.w * this.coverScale
-    coin.height = hud.h * this.coverScale
-    coin.position.set(start.x, start.y)
-    this.fxLayer.addChild(coin)
-    const end = this.coins.iconGlobalPos()
-    this.flyingCoins.push({ sprite: coin, start: new Point(start.x, start.y), end, t: 0, reward })
-  }
-
-  private tickFlyingCoins(dt: number): void {
-    for (let i = this.flyingCoins.length - 1; i >= 0; i--) {
-      const fc = this.flyingCoins[i]
-      fc.t += dt
-      const p = Math.min(fc.t / FLY_DURATION, 1)
-      // Ease-in: coin lingers a beat near the bubble then accelerates to HUD.
-      const eased = p * p
-      fc.sprite.position.set(
-        fc.start.x + (fc.end.x - fc.start.x) * eased,
-        fc.start.y + (fc.end.y - fc.start.y) * eased,
-      )
-      if (p >= 1) {
-        this.fxLayer.removeChild(fc.sprite)
-        fc.sprite.destroy()
-        this.flyingCoins.splice(i, 1)
-        this.coins.add(fc.reward, fc.end)
-      }
-    }
-  }
-}
-
-function sameToppings(a: ReadonlyArray<PitaTopping>, b: ReadonlyArray<PitaTopping>): boolean {
-  if (a.length !== b.length) return false
-  const setB = new Set(b)
-  for (const t of a) if (!setB.has(t)) return false
-  return true
-}
-
-function isSubset(sub: ReadonlyArray<PitaTopping>, sup: ReadonlyArray<PitaTopping>): boolean {
-  if (sub.length > sup.length) return false
-  const setSup = new Set(sup)
-  for (const t of sub) if (!setSup.has(t)) return false
-  return true
 }
 
 function happySfxFor(name: SpineName): Sfx {

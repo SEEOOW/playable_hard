@@ -5,6 +5,7 @@ import { applySpec, type LayoutMap, type LayerSpec } from '../layout'
 import { config } from '../config'
 import { PitaAssembly } from '../pita/PitaAssembly'
 import { PITA_ORIGIN_DX, PITA_ORIGIN_DY, type PitaIngredient, type PitaTopping } from '../pita/recipes'
+import { canCoverDemand } from '../pita/smartCooking'
 
 type CookState = 'idle' | 'slicing'
 
@@ -253,12 +254,11 @@ export class Kitchen extends Container {
 
   // True iff there's a perfect matching from `supply` to `activeOrderToppings`
   // where supply[i] can claim demand[j] iff supply[i].toppings ⊆ demand[j].
+  // Delegates the math to src/pita/smartCooking.ts; this wrapper only adds
+  // the "no feed wired → permissive" fast path.
   private canCoverDemand(supply: ReadonlyArray<ReadonlyArray<PitaTopping>>): boolean {
     if (!this.activeOrderToppings) return true
-    const demand = this.activeOrderToppings()
-    if (supply.length === 0) return true
-    if (demand.length < supply.length) return false
-    return maxMatch(supply, demand) === supply.length
+    return canCoverDemand(supply, this.activeOrderToppings())
   }
 
   private hasAvailableMeat(): boolean {
@@ -467,37 +467,6 @@ function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t
 }
 
-function toppingsSubset(sub: ReadonlyArray<PitaTopping>, sup: ReadonlyArray<PitaTopping>): boolean {
-  if (sub.length > sup.length) return false
-  for (const v of sub) if (!sup.includes(v)) return false
-  return true
-}
-
-// Bipartite max matching (Kuhn's algorithm). supply[i] can claim demand[j]
-// iff supply[i].toppings ⊆ demand[j]. Inputs are tiny (≤3 supply, ≤9 demand).
-function maxMatch(
-  supply: ReadonlyArray<ReadonlyArray<PitaTopping>>,
-  demand: ReadonlyArray<ReadonlyArray<PitaTopping>>,
-): number {
-  const matchD: number[] = new Array(demand.length).fill(-1)
-  const tryAssign = (i: number, visited: boolean[]): boolean => {
-    for (let j = 0; j < demand.length; j++) {
-      if (visited[j]) continue
-      if (!toppingsSubset(supply[i], demand[j])) continue
-      visited[j] = true
-      if (matchD[j] === -1 || tryAssign(matchD[j], visited)) {
-        matchD[j] = i
-        return true
-      }
-    }
-    return false
-  }
-  let count = 0
-  for (let i = 0; i < supply.length; i++) {
-    if (tryAssign(i, new Array(demand.length).fill(false))) count++
-  }
-  return count
-}
 
 // Wires a single sprite as a tap source for an ingredient action.
 function setupTapAdd(sprite: Sprite, fire: () => void): void {
