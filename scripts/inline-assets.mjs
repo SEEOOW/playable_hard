@@ -16,6 +16,7 @@ const OUT  = join(__dirname, '..', 'src', 'inlinedAssets.ts')
 
 const MIME = {
   '.png':   'image/png',
+  '.webp':  'image/webp',
   '.jpg':   'image/jpeg',
   '.jpeg':  'image/jpeg',
   '.mp3':   'audio/mpeg',

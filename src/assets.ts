@@ -23,38 +23,38 @@ export type AssetName =
 const url = (path: string): string => import.meta.env.BASE_URL + path
 
 const MANIFEST: Record<AssetName, string> = {
-  back:           url('images/location/back.jpg'),
-  table:          url('images/location/table.png'),
-  grill:          url('images/location/grill.png'),
-  knife:          url('images/location/knife.png'),
-  bowl:           url('images/meat/bowl.png'),
-  basket:         url('images/tortilla/basket.png'),
-  tortilla:       url('images/tortilla/tortilla.png'),
-  fries:          url('images/fry/potato2_ready3.png'),
-  tomato:         url('images/tomato/tomato.png'),
-  cucumber:       url('images/cucumbers/cucumber.png'),
-  drink:          url('images/location/drink.png'),
-  plate:          url('images/dish/plate.png'),
-  meat1:          url('images/meat/meat1.png'),
-  meat2:          url('images/meat/meat2.png'),
-  pita_back:      url('images/pita/pita_back.png'),
-  pita_top:       url('images/pita/pita_top.png'),
-  pita_front:     url('images/pita/pita_front.png'),
-  pita_meat_a:    url('images/pita/pita_meat_a.png'),
-  pita_meat_b:    url('images/pita/pita_meat_b.png'),
-  pita_cucumber:  url('images/pita/pita_cucumber.png'),
-  pita_fries_a:   url('images/pita/pita_fries_a.png'),
-  pita_fries_b:   url('images/pita/pita_fries_b.png'),
-  pita_tomato:    url('images/pita/pita_tomato.png'),
-  coin:           url('images/ui/coin.png'),
-  sound_on:       url('images/ui/button_sound_on.png'),
-  bubble:         url('images/ui/bubble.png'),
-  hand:           url('images/ui/hand.png'),
-  button_install: url('images/ui/button_install.png'),
-  check_mark:     url('images/ui/check_mark.png'),
-  new_avatar:     url('images/ui/new_avatar.png'),
-  timer:          url('images/ui/timer.png'),
-  timer_progress: url('images/ui/timer_progress.png'),
+  back:           url('images/location/back.webp'),
+  table:          url('images/location/table.webp'),
+  grill:          url('images/location/grill.webp'),
+  knife:          url('images/location/knife.webp'),
+  bowl:           url('images/meat/bowl.webp'),
+  basket:         url('images/tortilla/basket.webp'),
+  tortilla:       url('images/tortilla/tortilla.webp'),
+  fries:          url('images/fry/potato2_ready3.webp'),
+  tomato:         url('images/tomato/tomato.webp'),
+  cucumber:       url('images/cucumbers/cucumber.webp'),
+  drink:          url('images/location/drink.webp'),
+  plate:          url('images/dish/plate.webp'),
+  meat1:          url('images/meat/meat1.webp'),
+  meat2:          url('images/meat/meat2.webp'),
+  pita_back:      url('images/pita/pita_back.webp'),
+  pita_top:       url('images/pita/pita_top.webp'),
+  pita_front:     url('images/pita/pita_front.webp'),
+  pita_meat_a:    url('images/pita/pita_meat_a.webp'),
+  pita_meat_b:    url('images/pita/pita_meat_b.webp'),
+  pita_cucumber:  url('images/pita/pita_cucumber.webp'),
+  pita_fries_a:   url('images/pita/pita_fries_a.webp'),
+  pita_fries_b:   url('images/pita/pita_fries_b.webp'),
+  pita_tomato:    url('images/pita/pita_tomato.webp'),
+  coin:           url('images/ui/coin.webp'),
+  sound_on:       url('images/ui/button_sound_on.webp'),
+  bubble:         url('images/ui/bubble.webp'),
+  hand:           url('images/ui/hand.webp'),
+  button_install: url('images/ui/button_install.webp'),
+  check_mark:     url('images/ui/check_mark.webp'),
+  new_avatar:     url('images/ui/new_avatar.webp'),
+  timer:          url('images/ui/timer.webp'),
+  timer_progress: url('images/ui/timer_progress.webp'),
 }
 
 // Spine skeletons. Files live in `assets_shawarma/spine_v42/` — copies of the
@@ -79,7 +79,7 @@ const SPINE_MANIFEST: Record<SpineName, { json: string; atlas: string }> = {
 }
 
 // Strip the './' base so we can match against INLINED keys (which are
-// publicDir-relative, e.g. 'images/ui/coin.png').
+// publicDir-relative, e.g. 'images/ui/coin.webp').
 function inlinedKey(path: string): string {
   return path.replace(/^\.?\//, '')
 }
@@ -108,12 +108,16 @@ export async function loadAssets(): Promise<void> {
   // page as a data: URL through the loader's `data.images` map — atlas
   // parser consumes that and resolves pages via Pixi's normal loader, which
   // handles data: URLs natively for image content.
+  // The atlas text still names pages with their original .png extension; we
+  // map back to that key while serving the actual WebP bytes.
   const spinePageImages: Record<string, string> = {}
   for (const path in INLINED) {
-    if (!path.startsWith('spine_v42/') || !path.endsWith('.png')) continue
-    const basename = path.split('/').pop()!
+    if (!path.startsWith('spine_v42/')) continue
+    if (!/\.(png|webp)$/.test(path)) continue
+    const realName = path.split('/').pop()!
+    const atlasKey = realName.replace(/\.webp$/, '.png')
     const asset = INLINED[path]
-    spinePageImages[basename] = `data:${asset.mime};base64,${asset.b64}`
+    spinePageImages[atlasKey] = `data:${asset.mime};base64,${asset.b64}`
   }
 
   const spineEntries: Array<{ alias: string; src: string; data?: unknown }> = []
@@ -135,11 +139,15 @@ export async function loadAssets(): Promise<void> {
   // missing UI icon (e.g. a placeholder slot waiting for a real file) must
   // not black-screen the whole playable. Missing aliases fall back to
   // Texture.WHITE via tex().
+  // Load each asset independently and swallow individual failures — a single
+  // missing UI icon (e.g. a placeholder slot waiting for a real file) must
+  // not black-screen the whole playable. Missing aliases fall back to
+  // Texture.WHITE via tex().
   const all = [...texEntries, ...spineEntries]
   await Promise.all(
     all.map((entry) =>
       Assets.load(entry).catch((err) => {
-        console.warn(`[assets] failed "${entry.alias}" (${entry.src}):`, err?.message ?? err)
+        console.warn(`[assets] failed "${entry.alias}":`, err?.message ?? err)
       }),
     ),
   )
