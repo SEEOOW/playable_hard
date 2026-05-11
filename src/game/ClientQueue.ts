@@ -19,6 +19,11 @@ export class ClientQueue extends Container {
   // in-bubble reward animation completes; scene flies a coin from this point
   // to the HUD counter.
   onItemDelivered: ((info: ItemDeliveredInfo) => void) | null = null
+  // Synchronous "the player just dropped a deliverable item on a matching
+  // client" event — fires immediately on success (before reward animation),
+  // so audio feedback isn't delayed by the 1.5 s reward sequence. `isLast`
+  // is true when the just-delivered slot completed the client's order.
+  onDeliveryAccepted: ((info: { isLast: boolean; spineName: SpineName }) => void) | null = null
 
   // Hard cap on the TOTAL number of clients spawned over the level — counts
   // every walk-in (on-screen, leaving, already-departed). Once reached, no
@@ -55,7 +60,10 @@ export class ClientQueue extends Container {
   tryDeliverPita(toppings: ReadonlyArray<PitaTopping>, hasMeat: boolean): boolean {
     for (const c of this.clients) {
       if (c.state !== 'waiting') continue
-      if (c.tryDeliverPita(toppings, hasMeat)) return true
+      if (c.tryDeliverPita(toppings, hasMeat)) {
+        this.onDeliveryAccepted?.({ isLast: c.isFullyDelivered(), spineName: c.spineName })
+        return true
+      }
     }
     return false
   }
@@ -65,7 +73,10 @@ export class ClientQueue extends Container {
   tryDeliverDrink(): boolean {
     for (const c of this.clients) {
       if (c.state !== 'waiting') continue
-      if (c.tryDeliverDrink()) return true
+      if (c.tryDeliverDrink()) {
+        this.onDeliveryAccepted?.({ isLast: c.isFullyDelivered(), spineName: c.spineName })
+        return true
+      }
     }
     return false
   }

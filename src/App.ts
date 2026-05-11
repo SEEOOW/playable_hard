@@ -2,12 +2,14 @@ import { Application } from 'pixi.js'
 import { GameScene } from './scene/GameScene'
 import { loadAssets } from './assets'
 import { Cheats } from './cheats'
+import { AudioManager } from './AudioManager'
 
 export class App {
   readonly pixi: Application
   private scene: GameScene | null = null
   private canvas: HTMLCanvasElement
   private cheats: Cheats | null = null
+  private audio = new AudioManager()
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas
@@ -26,13 +28,17 @@ export class App {
 
     await loadAssets()
 
-    this.scene = new GameScene()
+    this.scene = new GameScene(this.audio)
     this.pixi.stage.addChild(this.scene)
     this.scene.resize(this.pixi.renderer.width, this.pixi.renderer.height)
     this.scene.start()
 
     this.pixi.stage.eventMode = 'static'
-    this.pixi.stage.on('pointerdown', () => this.scene?.notifyInteraction())
+    this.pixi.stage.on('pointerdown', () => {
+      // First-tap gesture unlocks browser audio autoplay and starts music.
+      this.audio.unlock()
+      this.scene?.notifyInteraction()
+    })
 
     this.pixi.ticker.add((ticker) => {
       const dt = ticker.deltaMS / 1000

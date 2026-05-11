@@ -3,9 +3,12 @@ import { layout, applySpec, applyUiAnchor, cover } from '../layout'
 import { tex } from '../assets'
 import { ClientQueue } from '../game/ClientQueue'
 import { Client } from '../game/Client'
+import type { SpineName } from '../assets'
+import type { Sfx } from '../AudioManager'
 import { Kitchen } from '../game/Kitchen'
 import { Plate } from '../game/Plate'
 import { Hint } from '../ui/Hint'
+import { AudioManager } from '../AudioManager'
 import type { PitaTopping } from '../pita/recipes'
 import { CoinsHud } from '../ui/CoinsHud'
 import { VisitorsHud } from '../ui/VisitorsHud'
@@ -67,7 +70,7 @@ export class GameScene extends Container {
   private viewH = 0
   private coverScale = 1
 
-  constructor() {
+  constructor(private audio: AudioManager) {
     super()
 
     // World ----------------------------------------------------------------
@@ -98,7 +101,10 @@ export class GameScene extends Container {
     this.hint = new Hint()
     this.cta = new CTA()
     this.installButton = new InstallButton()
-    this.installButton.onClick = () => openStore()
+    this.installButton.onClick = () => {
+      this.audio.play('tap')
+      openStore()
+    }
 
     // Install button last in uiRoot so it draws ABOVE the rest of the UI.
     this.uiRoot.addChild(
@@ -192,7 +198,15 @@ export class GameScene extends Container {
     }
 
     this.clientQueue.onItemDelivered = ({ reward, worldPos }) => {
+      // Audio is fired from onDeliveryAccepted (sync at tap moment); this
+      // callback runs 1.5 s later, only to launch the flying-coin FX.
       this.spawnFlyingCoin(worldPos, reward)
+    }
+    this.clientQueue.onDeliveryAccepted = ({ isLast, spineName }) => {
+      // 'ok' on every delivered position; gendered happy cheer adds on top
+      // when the slot completed the client's full order.
+      this.audio.play('ok')
+      if (isLast) this.audio.play(happySfxFor(spineName))
     }
 
     this.clientQueue.onAllDone = () => this.finish()
@@ -215,6 +229,19 @@ export class GameScene extends Container {
     // Smart Cooking feed: lets Kitchen veto basket placements and ingredient
     // additions that don't lead to any active order.
     this.kitchen.activeOrderToppings = () => this.clientQueue.activeOrderToppings()
+
+    // SFX: kitchen actions. Each accept-only callback fires ONLY on actions
+    // that actually go through (slot free, Smart Cooking allows, etc.) —
+    // blocked taps stay silent. The onIngredientTap hook is the exception:
+    // it fires on every press for click feedback, regardless of result.
+    this.kitchen.onSliceStart      = () => this.audio.play('slice_meat')
+    this.kitchen.onMeatPlaced      = () => this.audio.play('fry')
+    this.kitchen.onPitaPlaced      = () => this.audio.play('ok')
+    this.kitchen.onIngredientAdded = () => this.audio.play('ok')
+    this.kitchen.onIngredientTap   = () => this.audio.play('tap')
+    this.kitchen.onPitaPress       = () => this.audio.play('tap')
+    this.kitchen.onBasketTap       = () => this.audio.play('tap')
+    this.kitchen.onSpitTap         = () => this.audio.play('tap')
 
     this.cta.onClick = () => openStore()
   }
@@ -324,6 +351,7 @@ export class GameScene extends Container {
   // position; tickFlyingCoins eases it toward the HUD coin icon and triggers
   // the counter increment on arrival.
   private spawnFlyingCoin(start: Point, reward: number): void {
+    this.audio.play('coins_fly_old')
     const coin = new Sprite(tex('coin'))
     coin.anchor.set(0.5, 0.5)
     // Lock pixel size to the HUD coin icon for the entire flight — set once
@@ -358,6 +386,14 @@ export class GameScene extends Container {
       }
     }
   }
+}
+
+// Gendered cheer for the spine name. Females alternate randomly between the
+// plain happy and the "haha" laugh so 5-guest sessions don't all sound the
+// same; males have a single happy variant in the asset pack.
+function happySfxFor(name: SpineName): Sfx {
+  if (name === 'italian_man' || name === 'old_grambler') return 'male_happy'
+  return Math.random() < 0.5 ? 'female_happy' : 'female_haha'
 }
 
 // Set equality for topping arrays — toppings have no duplicates inside a

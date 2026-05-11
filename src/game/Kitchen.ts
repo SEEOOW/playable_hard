@@ -25,6 +25,27 @@ export class Kitchen extends Container {
   // some active order's path (subset relation).
   activeOrderToppings: (() => ReadonlyArray<ReadonlyArray<PitaTopping>>) | null = null
 
+  // SFX hooks — each fires ONLY when the corresponding action is actually
+  // accepted (slot free, Smart Cooking allows, etc.). Blocked taps don't
+  // fire any of these callbacks, so they stay silent per the audio spec.
+  onSliceStart:       (() => void) | null = null
+  onMeatPlaced:       (() => void) | null = null
+  onPitaPlaced:       (() => void) | null = null
+  onIngredientAdded:  (() => void) | null = null
+  // Generic "the player tapped an ingredient station" feedback — fires on
+  // every press, regardless of whether the ingredient ended up on a pita.
+  // Wired to the click sound so players always hear they hit something.
+  onIngredientTap:    ((ing: PitaIngredient) => void) | null = null
+  // Same idea for taps on a built pita assembly — fires before the delivery
+  // match attempt so the click sound plays even when no client matches.
+  onPitaPress:        (() => void) | null = null
+  // Tap on the basket (pita stack) — fires on every press, even when Smart
+  // Cooking refuses the placement; onPitaPlaced still gates the success SFX.
+  onBasketTap:        (() => void) | null = null
+  // Tap on the spit — fires on every press, even when the slice limit has
+  // been reached. onSliceStart still gates the slicing SFX to accepted taps.
+  onSpitTap:          (() => void) | null = null
+
   // PSD-mirrored decor + interactives
   private basket: Sprite
   private tortilla: Sprite
@@ -67,7 +88,10 @@ export class Kitchen extends Container {
     super()
 
     this.spit = new MeatSpit()
-    this.spit.onSliceTap = () => this.requestSlice()
+    this.spit.onSliceTap = () => {
+      this.onSpitTap?.()
+      this.requestSlice()
+    }
 
     this.basket   = new Sprite(tex('basket'))
     this.tortilla = new Sprite(tex('tortilla'))
@@ -110,17 +134,25 @@ export class Kitchen extends Container {
     this.basket.eventMode = 'static'
     this.basket.cursor = 'pointer'
     this.tortilla.eventMode = 'none'
-    this.basket.on('pointerdown', () => this.placePita())
+    this.basket.on('pointerdown', () => {
+      this.onBasketTap?.()
+      this.placePita()
+    })
 
     // Ingredient stations on the table — tap on any of them adds the
     // corresponding ingredient inside the current open pita. Cap at 3.
     // Meat slots (when visible) sit on top of the bowl and would otherwise
-    // swallow the tap, so wire them too.
-    setupTapAdd(this.bowl, () => this.addIngredient('meat'))
-    this.meatStack.forEach((s) => setupTapAdd(s, () => this.addIngredient('meat')))
-    setupTapAdd(this.fries, () => this.addIngredient('fries'))
-    this.cucumberSlices.forEach((s) => setupTapAdd(s, () => this.addIngredient('cucumber')))
-    this.tomatoSlices.forEach((s) => setupTapAdd(s, () => this.addIngredient('tomato')))
+    // swallow the tap, so wire them too. Every press also fires
+    // onIngredientTap (scene plays the click sound).
+    const wireIng = (sprite: Sprite, ing: PitaIngredient) => setupTapAdd(sprite, () => {
+      this.onIngredientTap?.(ing)
+      this.addIngredient(ing)
+    })
+    wireIng(this.bowl, 'meat')
+    this.meatStack.forEach((s) => wireIng(s, 'meat'))
+    wireIng(this.fries, 'fries')
+    this.cucumberSlices.forEach((s) => wireIng(s, 'cucumber'))
+    this.tomatoSlices.forEach((s) => wireIng(s, 'tomato'))
     // Drinks aren't placed inside the pita — they're a separate order item.
     // Tap → try to deliver; on success hide + reappear after cooldown.
     this.drinks.forEach((sprite, idx) => setupTapAdd(sprite, () => this.tryDeliverDrink(idx)))
@@ -159,6 +191,7 @@ export class Kitchen extends Container {
     for (const pita of this.pitas) {
       if (!pita.hasPita()) {
         pita.spawnEmpty()
+        this.onPitaPlaced?.()
         return
       }
     }
@@ -346,6 +379,7 @@ export class Kitchen extends Container {
 
   private tryDeliverPita(assembly: PitaAssembly): void {
     if (!assembly.hasPita()) return
+    this.onPitaPress?.()
     if (this.onPitaTap?.(assembly)) {
       assembly.reset()
     }
@@ -404,6 +438,7 @@ export class Kitchen extends Container {
     if (this.nextSlotIdx >= this.meatStack.length) return
     this.meatStack[this.nextSlotIdx].visible = true
     this.nextSlotIdx += 1
+    this.onMeatPlaced?.()
     if (this.cookState === 'idle') {
       this.cookState = 'slicing'
       this.sliceT = 0
@@ -411,6 +446,7 @@ export class Kitchen extends Container {
       // Cut overlay starts small at the top of the slice; swapped to large
       // mid-way through (see runCooking). Spine alpha fades out post-slice.
       this.spit.playCut(config.cooking.cutSkinSmall)
+      this.onSliceStart?.()
     }
   }
 

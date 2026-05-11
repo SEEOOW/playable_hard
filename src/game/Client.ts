@@ -53,7 +53,14 @@ type ClientOrderItem = OrderItem & {
   slideT: number               // -1 = no slide active; otherwise 0..1 progress
 }
 
-export type ItemDeliveredInfo = { reward: number; worldPos: Point }
+export type ItemDeliveredInfo = {
+  reward: number
+  worldPos: Point
+  isLast: boolean
+  // Identity of the receiving client — scene uses this to pick a gendered
+  // happy SFX when their full order completes.
+  spineName: SpineName
+}
 
 export class Client extends Container {
   readonly order: Order
@@ -285,7 +292,16 @@ export class Client extends Container {
     it.slot.visible = false
     it.rewardCoin = null
     it.rewardGroup = null
-    this.onItemDelivered?.({ reward, worldPos: new Point(gp.x, gp.y) })
+    // After flipping this slot to 'gone' it's safe to check whether the
+    // whole order has now finished — scene uses this to swap the per-slot
+    // 'ok' SFX for a single 'complete' on the last delivery.
+    const isLast = this.orderItems.every((i) => i.rewardPhase === 'gone')
+    this.onItemDelivered?.({
+      reward,
+      worldPos: new Point(gp.x, gp.y),
+      isLast,
+      spineName: this.spineName,
+    })
     this.reflowSlots()
   }
 
