@@ -2,9 +2,11 @@ import { Container, Point, Sprite } from 'pixi.js'
 import { layout, applySpec, applyUiAnchor, cover } from '../layout'
 import { tex } from '../assets'
 import { ClientQueue } from '../game/ClientQueue'
+import { Client } from '../game/Client'
 import { Kitchen } from '../game/Kitchen'
 import { Plate } from '../game/Plate'
 import { Hint } from '../ui/Hint'
+import type { PitaTopping } from '../pita/recipes'
 import { CoinsHud } from '../ui/CoinsHud'
 import { VisitorsHud } from '../ui/VisitorsHud'
 import { CTA } from '../ui/CTA'
@@ -135,6 +137,10 @@ export class GameScene extends Container {
   update(dt: number): void {
     this.clientQueue.update(dt)
     this.kitchen.update(dt)
+    // Re-plan the hint every frame — pointAt is idempotent on the same
+    // target, so this only resets the idle countdown when the next valid
+    // step actually changes (i.e. the player progressed or state shifted).
+    this.refreshHint()
     this.hint.update(dt)
     this.installButton.update(dt)
     this.tickFlyingCoins(dt)
@@ -163,6 +169,7 @@ export class GameScene extends Container {
     this.coins.layout(layout.ui.coinHud, this.viewW, this.viewH, this.coverScale)
     this.visitors.layout(layout.ui.visitorsHud, this.viewW, this.viewH, this.coverScale)
     this.installButton.layout(layout.ui.installButton, this.viewW, this.viewH, this.coverScale)
+    this.hint.layout(this.coverScale)
     this.cta.layout(this.viewW, this.viewH)
   }
 
@@ -227,7 +234,81 @@ export class GameScene extends Container {
     this.tutorialStep += 1
   }
 
+  // Picks the highest-priority waiting client and returns the next valid
+  // tappable target for delivering their order. Returns null when there's
+  // no actionable next step (e.g. all drinks on cooldown, no plates free,
+  // no waiting clients). Per-frame safe: idempotent through Hint.pointAt.
   private resolveHintTarget(): Container | null {
+    const waiting = this.clientQueue.waitingClients()
+    if (waiting.length === 0) return null
+    // Priority: most-progressed order first (closest to completion). Tiebreak
+    // by lowest patience so the most urgent client gets coached. Falls
+    // through to the next client if their order has no actionable step
+    // (e.g. only drink left and every drink is on cooldown).
+    const sorted = [...waiting].sort((a, b) => {
+      const ad = a.deliveredCount(); const bd = b.deliveredCount()
+      if (ad !== bd) return bd - ad
+      return a.patienceLeft - b.patienceLeft
+    })
+    for (const client of sorted) {
+      const target = this.planFor(client)
+      if (target) return target
+    }
+    return null
+  }
+
+  private planFor(client: Client): Container | null {
+    for (const item of client.pendingItems()) {
+      const t = this.planForItem(item)
+      if (t) return t
+    }
+    return null
+  }
+
+  private planForItem(
+    item: { kind: 'drink' } | { kind: 'pita'; toppings: ReadonlyArray<PitaTopping> },
+  ): Container | null {
+    if (item.kind === 'drink') return this.kitchen.drinkTarget()
+
+    const target = item.toppings
+    const pitas = this.kitchen.pitaAssemblies()
+
+    // 1. Already-ready assembly that exactly matches → tap to deliver.
+    for (const p of pitas) {
+      if (!p.hasPita() || !p.hasMeat()) continue
+      if (sameToppings(p.toppings(), target)) return p
+    }
+
+    // 2. On-path assembly — toppings ⊆ target, prefer the most-progressed
+    //    so we keep finishing what's already started rather than restarting.
+    let best: ReturnType<Kitchen['pitaAssemblies']>[number] | null = null
+    let bestScore = -1
+    for (const p of pitas) {
+      if (!p.hasPita()) continue
+      const t = p.toppings()
+      if (!isSubset(t, target)) continue
+      const score = t.length * 2 + (p.hasMeat() ? 1 : 0)
+      if (score > bestScore) { best = p; bestScore = score }
+    }
+    if (best) {
+      // Meat-first rule: toppings can't be added until meat is on the pita.
+      if (!best.hasMeat()) {
+        return this.kitchen.hasMeatInBowl() ? this.kitchen.meatTarget() : this.kitchen.spitTarget()
+      }
+      // Find the first missing topping the kitchen actually has a station for.
+      const have = new Set(best.toppings())
+      for (const t of target) {
+        if (have.has(t)) continue
+        const ts = this.kitchen.ingredientTarget(t)
+        if (ts) return ts
+      }
+      // Fully-built and matching — should have been caught in (1); defensive.
+      return best
+    }
+
+    // 3. No assembly is on-path — start fresh. Smart Cooking will allow the
+    //    placement because there's at least one demand slot for this target.
+    if (this.kitchen.hasUnplacedPlate()) return this.kitchen.basketTarget()
     return null
   }
 
@@ -257,6 +338,7 @@ export class GameScene extends Container {
     this.flyingCoins.push({ sprite: coin, start: new Point(start.x, start.y), end, t: 0, reward })
   }
 
+  // (helpers below)
   private tickFlyingCoins(dt: number): void {
     for (let i = this.flyingCoins.length - 1; i >= 0; i--) {
       const fc = this.flyingCoins[i]
@@ -276,4 +358,22 @@ export class GameScene extends Container {
       }
     }
   }
+}
+
+// Set equality for topping arrays — toppings have no duplicates inside a
+// single recipe, so length + subset is sufficient.
+function sameToppings(
+  a: ReadonlyArray<PitaTopping>, b: ReadonlyArray<PitaTopping>,
+): boolean {
+  if (a.length !== b.length) return false
+  for (const v of a) if (!b.includes(v)) return false
+  return true
+}
+
+function isSubset(
+  sub: ReadonlyArray<PitaTopping>, sup: ReadonlyArray<PitaTopping>,
+): boolean {
+  if (sub.length > sup.length) return false
+  for (const v of sub) if (!sup.includes(v)) return false
+  return true
 }

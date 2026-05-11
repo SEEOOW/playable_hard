@@ -268,6 +268,33 @@ export class Kitchen extends Container {
     }
   }
 
+  // Hint planner accessors. Read-only intent — the planner just needs to
+  // know what's currently tappable / where each station lives so it can
+  // point the hand at the next valid step in the player's path.
+  basketTarget(): Container { return this.basket }
+  spitTarget(): Container { return this.spit }
+  // Topmost visible meat slice (consumeOneMeat takes from the back of the
+  // stack first); falls back to the empty bowl when nothing is sliced.
+  meatTarget(): Container {
+    for (let i = this.meatStack.length - 1; i >= 0; i--) {
+      if (this.meatStack[i].visible) return this.meatStack[i]
+    }
+    return this.bowl
+  }
+  hasMeatInBowl(): boolean { return this.hasAvailableMeat() }
+  ingredientTarget(ing: PitaTopping): Container | null {
+    if (ing === 'cucumber') return this.cucumberSlices[0] ?? null
+    if (ing === 'fries')    return this.fries
+    if (ing === 'tomato')   return this.tomatoSlices[0] ?? null
+    return null
+  }
+  // First drink that's currently on the counter (not on cooldown).
+  drinkTarget(): Container | null {
+    return this.drinks.find((s) => s.visible) ?? null
+  }
+  pitaAssemblies(): ReadonlyArray<PitaAssembly> { return this.pitas }
+  hasUnplacedPlate(): boolean { return this.pitas.some((p) => !p.hasPita()) }
+
   update(dt: number): void {
     this.spit.update(dt)
     this.runCooking(dt)

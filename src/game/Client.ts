@@ -170,6 +170,23 @@ export class Client extends Container {
     return this.orderItems.length > 0 && this.orderItems.every((i) => i.delivered)
   }
 
+  // Hint planner accessors — read-only views over the order state.
+  pendingItems(): ReadonlyArray<{ kind: 'drink' } | { kind: 'pita'; toppings: ReadonlyArray<PitaTopping> }> {
+    const out: Array<{ kind: 'drink' } | { kind: 'pita'; toppings: ReadonlyArray<PitaTopping> }> = []
+    for (const it of this.orderItems) {
+      if (it.delivered) continue
+      if (it.kind === 'drink') out.push({ kind: 'drink' })
+      else out.push({ kind: 'pita', toppings: it.toppings })
+    }
+    return out
+  }
+  deliveredCount(): number {
+    let n = 0
+    for (const it of this.orderItems) if (it.delivered) n++
+    return n
+  }
+  totalCount(): number { return this.orderItems.length }
+
   // Topping sets of every undelivered pita slot — feeds Smart Cooking so the
   // kitchen can allow only those ingredients that keep an open pita on the
   // path to some active order.

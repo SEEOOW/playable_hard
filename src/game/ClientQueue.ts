@@ -110,6 +110,12 @@ export class ClientQueue extends Container {
     return null
   }
 
+  // Snapshot of all clients currently in the 'waiting' state — used by the
+  // hint planner to pick the priority order to coach toward.
+  waitingClients(): ReadonlyArray<Client> {
+    return this.clients.filter((c) => c.state === 'waiting')
+  }
+
   // Topping sets of every undelivered pita slot in waiting clients. Used by
   // Kitchen's Smart Cooking gate to validate ingredient additions.
   activeOrderToppings(): ReadonlyArray<ReadonlyArray<PitaTopping>> {
