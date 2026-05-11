@@ -8,12 +8,9 @@ import { applySpec, type LayerSpec, type SpineSpitPos } from '../layout'
 //   grill → skewerBack → spitBack → kebabCut (overlay) → spitFront → skewerFront.
 // All five spine skeletons share the same root position + scale (`spitSpine`).
 export class MeatSpit extends Container {
-  portions = config.spit.maxPortions
-  onPortionTaken: (() => void) | null = null
   // Fired when the player taps the spit area. Kitchen drives the slice motion.
   onSliceTap: (() => void) | null = null
 
-  private cookTimer = 0
   private grill: Sprite
   private skewerBack:  Spine
   private spitBack:    Spine
@@ -84,20 +81,8 @@ export class MeatSpit extends Container {
     sk.setSlotsToSetupPose()
   }
 
-  takePortion(): boolean {
-    if (this.portions <= 0) return false
-    this.portions -= 1
-    this.onPortionTaken?.()
-    return true
-  }
-
-  update(dt: number): void {
-    if (this.portions >= config.spit.maxPortions) return
-    this.cookTimer += dt
-    if (this.cookTimer >= config.spit.cookTime) {
-      this.cookTimer = 0
-      this.portions += 1
-    }
+  update(_dt: number): void {
+    // Cycle/cut state is owned by Kitchen now; nothing periodic to tick here.
   }
 
   layout(grillSpec: LayerSpec, spinePos: SpineSpitPos): void {

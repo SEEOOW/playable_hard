@@ -1,7 +1,5 @@
 import { Container, Point, Sprite, Text } from 'pixi.js'
 import { Spine } from '@esotericsoftware/spine-pixi-v8'
-import { Order } from './Order'
-import type { RecipeId } from '../recipes'
 import { makeSpine, tex, type SpineName } from '../assets'
 import { applySpec, layout } from '../layout'
 import { config } from '../config'
@@ -63,7 +61,6 @@ export type ItemDeliveredInfo = {
 }
 
 export class Client extends Container {
-  readonly order: Order
   readonly spineName: SpineName
   slotIdx = 0
   state: ClientState = 'walkingIn'
@@ -93,9 +90,8 @@ export class Client extends Container {
   private walkTarget = new Point()
   private onArrivedCb: (() => void) | null = null
 
-  constructor(order: Order, spineName: SpineName) {
+  constructor(spineName: SpineName) {
     super()
-    this.order = order
     this.spineName = spineName
     this.spine = makeSpine(spineName)
     this.spine.eventMode = 'none'
@@ -372,10 +368,6 @@ export class Client extends Container {
     this.walkT = 0
     this.walkDur = config.client.walkInDuration
     this.onArrivedCb = onArrived
-  }
-
-  receive(recipe: RecipeId): boolean {
-    return this.order.tryDeliver(recipe)
   }
 
   walkOut(target: Point, onDone: () => void): void {

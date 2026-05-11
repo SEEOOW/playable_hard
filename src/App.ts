@@ -1,14 +1,12 @@
 import { Application } from 'pixi.js'
 import { GameScene } from './scene/GameScene'
 import { loadAssets } from './assets'
-import { Cheats } from './cheats'
 import { AudioManager } from './AudioManager'
 
 export class App {
   readonly pixi: Application
   private scene: GameScene | null = null
   private canvas: HTMLCanvasElement
-  private cheats: Cheats | null = null
   private audio = new AudioManager()
 
   constructor(canvas: HTMLCanvasElement) {
@@ -46,14 +44,6 @@ export class App {
     })
 
     window.addEventListener('resize', this.onResize)
-
-    // Dev cheats — toggle the panel with C, fire actions with their hotkey.
-    this.cheats = new Cheats()
-    this.cheats.register({
-      key: 'g',
-      label: 'Отправить ближайшего посетителя',
-      action: () => this.scene?.dismissNextClient(),
-    })
   }
 
   private onResize = (): void => {

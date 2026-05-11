@@ -2,9 +2,16 @@
 // fine for a playable with ~7 short clips. Music loops as a single element;
 // SFX clone the element on each play so rapid triggers overlap rather than
 // cut each other off.
+//
+// In the single-file production build, MP3s are inlined as data: URLs via
+// `assetServer`'s INLINED map — HTMLAudioElement does NOT go through fetch,
+// so we have to set src directly to a data URL rather than relying on the
+// fetch interceptor that handles Pixi/spine assets.
+
+import { INLINED } from './inlinedAssets'
 
 export type Sfx =
-  | 'tap' | 'slice_meat' | 'fry' | 'ok' | 'complete' | 'coins_fly_old'
+  | 'tap' | 'slice_meat' | 'fry' | 'ok' | 'coins_fly_old'
   | 'male_happy' | 'female_happy' | 'female_haha'
 type Track = Sfx | 'music'
 
@@ -14,7 +21,6 @@ const FILE: Record<Track, string> = {
   slice_meat:    'slice_meat.mp3',
   fry:           'fry.mp3',
   ok:            'ok.mp3',
-  complete:      'complete.mp3',
   coins_fly_old: 'coins_fly_old.mp3',
   male_happy:    'male_happy.mp3',
   female_happy:  'female_happy.mp3',
@@ -33,7 +39,11 @@ export class AudioManager {
   constructor() {
     const base = import.meta.env.BASE_URL + 'sounds/'
     const make = (file: string): HTMLAudioElement => {
-      const el = new Audio(base + file)
+      const inlined = INLINED['sounds/' + file]
+      const src = inlined
+        ? `data:${inlined.mime};base64,${inlined.b64}`
+        : base + file
+      const el = new Audio(src)
       el.preload = 'auto'
       return el
     }
@@ -43,7 +53,6 @@ export class AudioManager {
       slice_meat:    make(FILE.slice_meat),
       fry:           make(FILE.fry),
       ok:            make(FILE.ok),
-      complete:      make(FILE.complete),
       coins_fly_old: make(FILE.coins_fly_old),
       male_happy:    make(FILE.male_happy),
       female_happy:  make(FILE.female_happy),

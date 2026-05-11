@@ -6,15 +6,12 @@ import { Client } from '../game/Client'
 import type { SpineName } from '../assets'
 import type { Sfx } from '../AudioManager'
 import { Kitchen } from '../game/Kitchen'
-import { Plate } from '../game/Plate'
 import { Hint } from '../ui/Hint'
 import { AudioManager } from '../AudioManager'
 import type { PitaTopping } from '../pita/recipes'
 import { CoinsHud } from '../ui/CoinsHud'
 import { VisitorsHud } from '../ui/VisitorsHud'
-import { CTA } from '../ui/CTA'
 import { InstallButton } from '../ui/InstallButton'
-import { config } from '../config'
 import { openStore } from '../redirect'
 
 // Flying-coin pacing for the per-position reward FX. Display size mirrors
@@ -62,13 +59,14 @@ export class GameScene extends Container {
   private coins: CoinsHud
   private visitors: VisitorsHud
   private hint: Hint
-  private cta: CTA
   private installButton: InstallButton
 
-  private tutorialStep = 0
   private viewW = 0
   private viewH = 0
   private coverScale = 1
+  // Sound button toggle state. When false, AudioManager is muted and the
+  // button is desaturated; flipping back to true re-enables music + SFX.
+  private soundOn = true
 
   constructor(private audio: AudioManager) {
     super()
@@ -96,10 +94,12 @@ export class GameScene extends Container {
     this.uiRoot = new Container()
 
     this.soundButton = new Sprite(tex('sound_on'))
+    this.soundButton.eventMode = 'static'
+    this.soundButton.cursor = 'pointer'
+    this.soundButton.on('pointerdown', () => this.toggleSound())
     this.coins = new CoinsHud()
     this.visitors = new VisitorsHud(VISITORS_GOAL)
     this.hint = new Hint()
-    this.cta = new CTA()
     this.installButton = new InstallButton()
     this.installButton.onClick = () => {
       this.audio.play('tap')
@@ -108,7 +108,7 @@ export class GameScene extends Container {
 
     // Install button last in uiRoot so it draws ABOVE the rest of the UI.
     this.uiRoot.addChild(
-      this.soundButton, this.coins, this.visitors, this.hint, this.cta, this.installButton,
+      this.soundButton, this.coins, this.visitors, this.hint, this.installButton,
     )
 
     this.fxLayer = new Container()
@@ -122,7 +122,7 @@ export class GameScene extends Container {
 
   start(): void {
     this.wireConnections()
-    this.clientQueue.start(config.queue.orderPlan, layout.clientSlots)
+    this.clientQueue.start(layout.clientSlots)
     this.refreshHint()
   }
 
@@ -156,11 +156,6 @@ export class GameScene extends Container {
     this.hint.notifyInteraction()
   }
 
-  // Dev cheat: dismiss the next waiting client (sends them off-screen).
-  dismissNextClient(): boolean {
-    return this.clientQueue.dismissNext()
-  }
-
   // Static, design-space layout. Called once at construction.
   private applyWorldLayout(): void {
     applySpec(this.back,  layout.background.back)
@@ -176,12 +171,10 @@ export class GameScene extends Container {
     this.visitors.layout(layout.ui.visitorsHud, this.viewW, this.viewH, this.coverScale)
     this.installButton.layout(layout.ui.installButton, this.viewW, this.viewH, this.coverScale)
     this.hint.layout(this.coverScale)
-    this.cta.layout(this.viewW, this.viewH)
   }
 
   private wireConnections(): void {
     this.clientQueue.onClientReady = () => {
-      this.kitchen.setActiveRecipes(this.clientQueue.activeRecipes())
       this.refreshHint()
     }
 
@@ -193,7 +186,6 @@ export class GameScene extends Container {
       if (this.visitors.bumpServed()) {
         openStore()
       }
-      this.kitchen.setActiveRecipes(this.clientQueue.activeRecipes())
       this.refreshHint()
     }
 
@@ -207,13 +199,6 @@ export class GameScene extends Container {
       // when the slot completed the client's full order.
       this.audio.play('ok')
       if (isLast) this.audio.play(happySfxFor(spineName))
-    }
-
-    this.clientQueue.onAllDone = () => this.finish()
-
-    this.kitchen.onPlateReady = (plate) => {
-      plate.onTap = (p) => this.handlePlateTap(p)
-      this.refreshHint()
     }
 
     // Tap on a finished pita / drink → try to match an open slot in any
@@ -232,8 +217,8 @@ export class GameScene extends Container {
 
     // SFX: kitchen actions. Each accept-only callback fires ONLY on actions
     // that actually go through (slot free, Smart Cooking allows, etc.) —
-    // blocked taps stay silent. The onIngredientTap hook is the exception:
-    // it fires on every press for click feedback, regardless of result.
+    // blocked taps stay silent. The on*Tap hooks are the exception:
+    // they fire on every press for click feedback, regardless of result.
     this.kitchen.onSliceStart      = () => this.audio.play('slice_meat')
     this.kitchen.onMeatPlaced      = () => this.audio.play('fry')
     this.kitchen.onPitaPlaced      = () => this.audio.play('ok')
@@ -242,23 +227,6 @@ export class GameScene extends Container {
     this.kitchen.onPitaPress       = () => this.audio.play('tap')
     this.kitchen.onBasketTap       = () => this.audio.play('tap')
     this.kitchen.onSpitTap         = () => this.audio.play('tap')
-
-    this.cta.onClick = () => openStore()
-  }
-
-  private handlePlateTap(plate: Plate): void {
-    const target = this.clientQueue.findMatching(plate.recipeId)
-    if (!target) return
-    plate.flyTo(target.position.clone(), () => {
-      target.receive(plate.recipeId)
-      plate.destroyPlate()
-      this.advanceTutorial()
-      this.refreshHint()
-    })
-  }
-
-  private advanceTutorial(): void {
-    this.tutorialStep += 1
   }
 
   // Picks the highest-priority waiting client and returns the next valid
@@ -343,8 +311,14 @@ export class GameScene extends Container {
     this.hint.pointAt(this.resolveHintTarget())
   }
 
-  private finish(): void {
-    this.cta.show()
+  // Sound on/off toggle wired to the bottom-left button. Mutes/unmutes the
+  // AudioManager and tints the button grey while silenced. The tap-on click
+  // sound only fires when re-enabling — toggling OFF stays silent.
+  private toggleSound(): void {
+    this.soundOn = !this.soundOn
+    this.audio.setMuted(!this.soundOn)
+    this.soundButton.tint = this.soundOn ? 0xffffff : 0x666666
+    if (this.soundOn) this.audio.play('tap')
   }
 
   // Spawns a coin sprite in fxLayer (stage space) at the bubble slot's world
@@ -366,7 +340,6 @@ export class GameScene extends Container {
     this.flyingCoins.push({ sprite: coin, start: new Point(start.x, start.y), end, t: 0, reward })
   }
 
-  // (helpers below)
   private tickFlyingCoins(dt: number): void {
     for (let i = this.flyingCoins.length - 1; i >= 0; i--) {
       const fc = this.flyingCoins[i]
@@ -388,28 +361,23 @@ export class GameScene extends Container {
   }
 }
 
-// Gendered cheer for the spine name. Females alternate randomly between the
-// plain happy and the "haha" laugh so 5-guest sessions don't all sound the
-// same; males have a single happy variant in the asset pack.
+function sameToppings(a: ReadonlyArray<PitaTopping>, b: ReadonlyArray<PitaTopping>): boolean {
+  if (a.length !== b.length) return false
+  const setB = new Set(b)
+  for (const t of a) if (!setB.has(t)) return false
+  return true
+}
+
+function isSubset(sub: ReadonlyArray<PitaTopping>, sup: ReadonlyArray<PitaTopping>): boolean {
+  if (sub.length > sup.length) return false
+  const setSup = new Set(sup)
+  for (const t of sub) if (!setSup.has(t)) return false
+  return true
+}
+
 function happySfxFor(name: SpineName): Sfx {
+  // Female: random between female_happy and female_haha for variety.
+  // Male: just male_happy.
   if (name === 'italian_man' || name === 'old_grambler') return 'male_happy'
   return Math.random() < 0.5 ? 'female_happy' : 'female_haha'
-}
-
-// Set equality for topping arrays — toppings have no duplicates inside a
-// single recipe, so length + subset is sufficient.
-function sameToppings(
-  a: ReadonlyArray<PitaTopping>, b: ReadonlyArray<PitaTopping>,
-): boolean {
-  if (a.length !== b.length) return false
-  for (const v of a) if (!b.includes(v)) return false
-  return true
-}
-
-function isSubset(
-  sub: ReadonlyArray<PitaTopping>, sup: ReadonlyArray<PitaTopping>,
-): boolean {
-  if (sub.length > sup.length) return false
-  for (const v of sub) if (!sup.includes(v)) return false
-  return true
 }

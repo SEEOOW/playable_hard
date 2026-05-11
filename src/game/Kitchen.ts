@@ -1,10 +1,8 @@
 import { Container, Graphics, Point, Sprite } from 'pixi.js'
 import { MeatSpit } from './MeatSpit'
-import { Plate } from './Plate'
 import { tex, type AssetName } from '../assets'
 import { applySpec, type LayoutMap, type LayerSpec } from '../layout'
 import { config } from '../config'
-import type { Ingredient, RecipeId } from '../recipes'
 import { PitaAssembly } from '../pita/PitaAssembly'
 import { PITA_ORIGIN_DX, PITA_ORIGIN_DY, type PitaIngredient, type PitaTopping } from '../pita/recipes'
 
@@ -12,7 +10,6 @@ type CookState = 'idle' | 'slicing'
 
 export class Kitchen extends Container {
   readonly spit: MeatSpit
-  onPlateReady: ((plate: Plate) => void) | null = null
   // Tap on a built pita: outer code (Scene → ClientQueue) returns true if it
   // was delivered to a waiting client, in which case the plate slot is reset.
   onPitaTap:  ((p: PitaAssembly) => boolean) | null = null
@@ -71,9 +68,6 @@ export class Kitchen extends Container {
   private cutSwapped = false
   private knifeRest = new Point()
   private slotCenters: Point[] = [new Point(), new Point(), new Point()]
-
-  private activeRecipes: RecipeId[] = []
-  private inProgress: Ingredient[] = []
 
   // Per-drink cooldown timer; >0 means hidden, ticks down to 0 → reappear.
   private drinkCooldown: number[] = [0, 0, 0]
@@ -285,19 +279,6 @@ export class Kitchen extends Container {
     // visual and the bookkeeping moves with consumption.
     if (!this.hasAvailableMeat()) {
       this.nextSlotIdx = 0
-    }
-  }
-
-  setActiveRecipes(recipes: RecipeId[]): void {
-    this.activeRecipes = recipes
-  }
-
-  hintTarget(step: 'pita' | 'meat' | 'juice' | 'plate'): Container | null {
-    switch (step) {
-      case 'pita':  return this.tortilla
-      case 'meat':  return this.bowl
-      case 'juice': return this.drinks[1]
-      case 'plate': return this.plateSprites[0]
     }
   }
 

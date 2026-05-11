@@ -1,7 +1,5 @@
 import { Container, Point } from 'pixi.js'
 import { Client, type ItemDeliveredInfo } from './Client'
-import { Order } from './Order'
-import type { RecipeId } from '../recipes'
 import { layout, DESIGN_W } from '../layout'
 import type { SpineName } from '../assets'
 import { generateOrder } from '../pita/orders'
@@ -14,7 +12,6 @@ const POOL: SpineName[] = ['italian_man', 'pretty_woman', 'old_grambler', 'old_s
 export class ClientQueue extends Container {
   onClientReady: ((c: Client) => void) | null = null
   onClientLeft:  ((c: Client, satisfied: boolean) => void) | null = null
-  onAllDone:     (() => void) | null = null
   // Per-position delivery feedback — fires once per delivered slot when the
   // in-bubble reward animation completes; scene flies a coin from this point
   // to the HUD counter.
@@ -38,19 +35,11 @@ export class ClientQueue extends Container {
   private clients: Client[] = []
   private slots: Point[] = []
 
-  start(_plan: RecipeId[][], slots: Point[]): void {
+  start(slots: Point[]): void {
     this.slots = slots
     for (let i = 0; i < slots.length && i < POOL.length; i++) {
       this.spawnAt(i, POOL[i])
     }
-  }
-
-  // Sends the first waiting client off-screen right.
-  dismissNext(): boolean {
-    const client = this.clients.find((c) => c.state === 'waiting')
-    if (!client) return false
-    this.dismissClient(client, false)
-    return true
   }
 
   // Tap-on-pita delivery. Returns true if some waiting client's open pita slot
@@ -112,15 +101,6 @@ export class ClientQueue extends Container {
     return this.clientsLimit === null || this.spawnedCount < this.clientsLimit
   }
 
-  findMatching(recipe: RecipeId): Client | null {
-    for (const c of this.clients) {
-      if (c.state !== 'waiting') continue
-      const item = c.order.items.find((i) => !i.delivered && i.recipe === recipe)
-      if (item) return c
-    }
-    return null
-  }
-
   // Snapshot of all clients currently in the 'waiting' state — used by the
   // hint planner to pick the priority order to coach toward.
   waitingClients(): ReadonlyArray<Client> {
@@ -136,17 +116,6 @@ export class ClientQueue extends Container {
       for (const t of c.openPitaToppings()) out.push(t)
     }
     return out
-  }
-
-  activeRecipes(): RecipeId[] {
-    const set = new Set<RecipeId>()
-    for (const c of this.clients) {
-      if (c.state !== 'waiting') continue
-      for (const item of c.order.items) {
-        if (!item.delivered) set.add(item.recipe)
-      }
-    }
-    return [...set]
   }
 
   update(dt: number): void {
@@ -175,8 +144,7 @@ export class ClientQueue extends Container {
     const slot = this.slots[slotIdx]
     if (!slot) return
     this.spawnedCount += 1
-    const order = new Order(['shawarma']) // legacy dummy — delivery logic TBD
-    const client = new Client(order, name)
+    const client = new Client(name)
     client.setOrder(generateOrder())
     client.slotIdx = slotIdx
     client.scale.set(layout.clientScale)

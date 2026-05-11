@@ -8,6 +8,47 @@
       html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1b1b1b; }
       canvas { display: block; }
     </style>
+    <!-- Fetch interceptor installed BEFORE the module bundle runs — Pixi's
+         DOMAdapter captures globalThis.fetch at module-init time, so the
+         module-level replacement loses the race. Reads from
+         window.__INLINED at call-time; the module sets that global from
+         inlinedAssets.ts before any Pixi load fires. -->
+    <script>
+      (function () {
+        var orig = window.fetch.bind(window);
+        // Plain non-atlas hit → delegate to native fetch with a data: URL so
+        // the browser builds a clean Response/Blob (hand-rolled Blob via
+        // atob makes createImageBitmap throw InvalidStateError on Chromium).
+        // Atlas hit → rewrite page filenames to data: URLs inline; spine's
+        // atlas loader will then resolve them natively without going through
+        // Pixi's texture pipeline (which bypasses window.fetch for images).
+        window.fetch = function (input, init) {
+          var url = typeof input === 'string'
+            ? input
+            : input instanceof URL ? input.toString() : input.url;
+          var inlined = window.__INLINED;
+          if (!inlined) return orig(input, init);
+          var hitKey = null;
+          for (var key in inlined) {
+            if (url === key || url.endsWith('/' + key)) { hitKey = key; break }
+          }
+          if (!hitKey) return orig(input, init);
+          var hit = inlined[hitKey];
+          // Text assets (.atlas, .json): serve as a real text Response so the
+          // spine loaders' extension test still matches and they get the raw
+          // string they expect. Binary (images / audio): native fetch on a
+          // data: URL produces a Response with the right Blob/mime.
+          if (hit.mime === 'text/plain' || hit.mime === 'application/json') {
+            var text = atob(hit.b64);
+            return Promise.resolve(new Response(text, {
+              status: 200,
+              headers: { 'Content-Type': hit.mime },
+            }));
+          }
+          return orig('data:' + hit.mime + ';base64,' + hit.b64, init);
+        };
+      })();
+    </script>
   </head>
   <body>
     <canvas id="game"></canvas>

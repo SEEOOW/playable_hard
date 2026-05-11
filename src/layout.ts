@@ -8,16 +8,6 @@ import type { AssetName, SpineName } from './assets'
 export const DESIGN_W = 1280
 export const DESIGN_H = 720
 
-// PSD layer stack, bottom (drawn first) → top (drawn last).
-export const Z_ORDER = [
-  'back', 'table',
-  'basket', 'tortilla', 'grill', 'knife', 'bowl',
-  'fries', 'cucumber',
-  'plates', 'drinks', 'tomato', 'pita', 'meat',
-  'sound', 'coin', 'hint', 'cta',  // UI: above world
-] as const
-export type LayerKey = typeof Z_ORDER[number]
-
 // World sprite placement. PSD smartobjects are non-uniformly scaled, so we
 // store both position and size and force them via `applySpec`.
 export type LayerSpec = { x: number; y: number; w: number; h: number }
@@ -106,7 +96,6 @@ export type LayoutMap = {
   juice: LayerSpec[]
   plates: LayerSpec[]
 
-  pitaClean: { pita1: LayerSpec; pita2: LayerSpec }
   meatStack: MeatChunk[]
 
   // PLACEHOLDER — final coords TBD from PSD/layout-data.
@@ -186,11 +175,6 @@ export const layout: LayoutMap = {
     s(647, 384, 106, 82),
     s(751, 384, 106, 82),
   ],
-
-  pitaClean: {
-    pita1: s(556, 391, 88, 63),
-    pita2: s(568, 360, 72, 56),
-  },
 
   meatStack: [
     { texture: 'meat1', spec: s(557, 562, 106, 62) },
